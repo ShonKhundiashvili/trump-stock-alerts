@@ -1,10 +1,13 @@
 name: daily-equity-scan
 
 # Daily technical screener over the S&P 500 + Nasdaq-100 → Daily Scan topic.
-# Weekdays ~12:30 UTC (pre-market ET, Mon-Fri). Research only, not financial advice.
+# Research only, not financial advice.
+#
+# The daily Mon-Fri schedule now runs on the always-on Mac host via launchd
+# (deploy/com.trumpstockalerts.scan.plist, 16:30 IDT = 9:30 ET). The cron here
+# is disabled so the scan doesn't post twice; kept as a manual fallback you can
+# trigger from the Actions tab (workflow_dispatch) if the host is down.
 on:
-  schedule:
-    - cron: "30 12 * * 1-5"
   workflow_dispatch: {}
 
 concurrency:
