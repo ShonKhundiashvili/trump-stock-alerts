@@ -186,7 +186,14 @@ def build_sources(
     # --- Prediction markets (Polymarket / Kalshi) — relay to predictions #
     pm_cfg = sources_config.get("polymarket", {})
     if pm_cfg.get("enabled"):
-        src = PolymarketSource(conn=conn, max_markets=pm_cfg.get("max_markets", 100))
+        src = PolymarketSource(
+            conn=conn, max_markets=pm_cfg.get("max_markets", 200),
+            max_emit=pm_cfg.get("max_emit", 15),
+            min_volume=pm_cfg.get("min_volume", 250000),
+            min_probability=pm_cfg.get("min_probability", 0.55),
+            max_probability=pm_cfg.get("max_probability", 0.95),
+            min_days_to_end=pm_cfg.get("min_days_to_end", 3),
+        )
         src.relay = True
         sources.append(_finalize(src, priority_cfg,
                                  explicit_priority=pm_cfg.get("priority", "PRIMARY"),

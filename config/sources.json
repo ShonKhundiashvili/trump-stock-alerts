@@ -103,11 +103,13 @@
 
   "polymarket": {
     "enabled": true,
-    "_note": "Public Polymarket API. Stock/crypto/M&A markets only, with probability >= min_probability and volume >= min_volume. Forwarded to the 'predictions' topic.",
+    "_note": "Public Polymarket API. Stock/crypto/M&A markets with real conviction + interest: probability between min and max (excludes coin-flips AND near-certain/no-info 100% markets), volume >= min_volume, and not near resolution (min_days_to_end). Forwarded to 'predictions'.",
     "max_markets": 200,
     "max_emit": 15,
-    "min_volume": 50000,
-    "min_probability": 0.50,
+    "min_volume": 250000,
+    "min_probability": 0.55,
+    "max_probability": 0.95,
+    "min_days_to_end": 3,
     "priority": "PRIMARY"
   },
 

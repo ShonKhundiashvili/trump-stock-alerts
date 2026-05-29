@@ -75,9 +75,10 @@ class KalshiSource(BaseSource):
             relevant = (category in RELEVANT_CATEGORIES) or is_market_relevant(title)
             if not relevant:
                 continue
-            # Only high-conviction markets: YES price (cents) >= 50%.
+            # Meaningful conviction: YES price (cents) in [55, 95] — not a
+            # coin-flip, not near-certain (no info).
             price = m.get("last_price") or m.get("yes_bid") or 0
-            if not isinstance(price, (int, float)) or price < 50:
+            if not isinstance(price, (int, float)) or price < 55 or price > 95:
                 continue
             if db.source_item_exists(self.conn, self.name, ticker):
                 continue
