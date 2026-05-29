@@ -77,7 +77,16 @@ cp .env.example .env                          # then fill in tokens
 - **alerting.json** — gating knobs:
   `min_alert_score` (60), `max_age_hours` (48), `send_low_confidence`,
   `send_social_rumor` / `social_rumor_min_score`, `social_requires_corroboration`,
-  `penalize_uncorroborated`, `respect_muted_sources/companies`.
+  `penalize_uncorroborated`, `respect_muted_sources/companies`, and the
+  cross-source verification gate: `require_corroboration` (hold non-primary
+  claims until confirmed), `min_independent_sources` (2), `ticker_cooldown_hours`
+  (6, one alert per ticker per window).
+
+**Verification before alerting:** Trump's own source (PRIMARY — his video
+captions / Truth Social / White House transcript) alerts on its own. Any other
+claim is **held** (`awaiting_corroboration`) until a PRIMARY source *or* ≥
+`min_independent_sources` independent sources report the same ticker — so a lone
+"Breaking: Trump said buy X" never fires unless it's actually confirmed.
 
 Update the ticker universe with `python scripts/update_stock_universe.py`
 (falls back to the bundled CSV if offline).

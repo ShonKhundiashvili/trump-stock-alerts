@@ -1,5 +1,5 @@
 {
-  "_comment": "Alert gating. alert_score is 0-100 (see feedback_learning.py). Only alerts that pass the muted checks and the score threshold are sent; suppressed ones are still stored with a reason.",
+  "_comment": "Alert gating. alert_score is 0-100 (see feedback_learning.py). Only alerts that pass mutes, recency, the cross-source verification gate, and the score threshold are sent; suppressed ones are still stored with a reason.",
   "min_alert_score": 60,
   "send_low_confidence": false,
   "send_social_rumor": true,
@@ -8,5 +8,10 @@
   "respect_muted_companies": true,
   "max_age_hours": 48,
   "social_requires_corroboration": true,
-  "penalize_uncorroborated": true
+  "penalize_uncorroborated": true,
+
+  "_verification": "Hold non-primary claims until confirmed across sources.",
+  "require_corroboration": true,
+  "min_independent_sources": 2,
+  "ticker_cooldown_hours": 6
 }

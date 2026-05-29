@@ -166,8 +166,10 @@ def test_alert_score_calculation(conn):
 def test_threshold_suppression(conn):
     item, det, _ = _store_detection(conn, ticker="MU", confidence=Confidence.MEDIUM,
                                     priority="SECONDARY", text_conf=Confidence.MEDIUM)
+    # require_corroboration off here so we isolate the score-threshold check.
     alerting = {"min_alert_score": 90, "respect_muted_sources": True,
-                "respect_muted_companies": True, "send_social_rumor": True}
+                "respect_muted_companies": True, "send_social_rumor": True,
+                "require_corroboration": False}
     decision = feedback_learning.evaluate_alert(conn, det, item, alerting)
     assert decision.send is False
     assert decision.reason == "below_min_score"

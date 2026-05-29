@@ -294,6 +294,20 @@ def corroboration(
     return (primary is not None, int(sec[0]) if sec else 0)
 
 
+def recent_alert_for_ticker(
+    conn: sqlite3.Connection, ticker: Optional[str], hours: int
+) -> bool:
+    """True if an alert for this ticker was already recorded within `hours`."""
+    if not ticker or not hours:
+        return False
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    row = conn.execute(
+        "SELECT 1 FROM alert_log WHERE ticker = ? AND sent_at >= ? LIMIT 1",
+        (ticker, cutoff),
+    ).fetchone()
+    return row is not None
+
+
 def alert_sent_for_text_hash(
     conn: sqlite3.Connection, text_hash: Optional[str], ticker: Optional[str]
 ) -> bool:

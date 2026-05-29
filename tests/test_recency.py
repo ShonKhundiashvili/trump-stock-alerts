@@ -189,3 +189,51 @@ def test_penalty_disabled_by_config(conn):
     cfg = dict(ALERTING, penalize_uncorroborated=False)
     bd = feedback_learning.compute_alert_score(conn, det, alerting=cfg)
     assert "uncorroborated_strong_claim" not in bd.parts
+
+
+# --------------------------------------------------------------------------- #
+# cross-source verification gate (intersect sources before alerting)
+# --------------------------------------------------------------------------- #
+VGATE = dict(ALERTING, require_corroboration=True, min_independent_sources=2)
+
+
+def test_lone_secondary_held_awaiting_corroboration(conn):
+    # A single uncorroborated news claim is HELD, not sent.
+    item, det = _make(conn, priority=SourcePriority.SECONDARY.value,
+                      confidence=Confidence.MEDIUM, primary_found=False, corroborating=1)
+    decision = feedback_learning.evaluate_alert(conn, det, item, VGATE)
+    assert decision.send is False
+    assert decision.reason == "awaiting_corroboration"
+
+
+def test_two_independent_sources_alert(conn):
+    item, det = _make(conn, priority=SourcePriority.SECONDARY.value,
+                      confidence=Confidence.MEDIUM, primary_found=False, corroborating=2)
+    decision = feedback_learning.evaluate_alert(conn, det, item, VGATE)
+    assert decision.send is True
+
+
+def test_secondary_with_primary_corroboration_alert(conn):
+    item, det = _make(conn, priority=SourcePriority.SECONDARY.value,
+                      confidence=Confidence.MEDIUM, primary_found=True, corroborating=1)
+    decision = feedback_learning.evaluate_alert(conn, det, item, VGATE)
+    assert decision.send is True
+
+
+def test_primary_self_verifies(conn):
+    # Trump's own source (PRIMARY) alerts without external corroboration.
+    item, det = _make(conn, priority=SourcePriority.PRIMARY.value,
+                      confidence=Confidence.HIGH, primary_found=False, corroborating=0)
+    decision = feedback_learning.evaluate_alert(conn, det, item, VGATE)
+    assert decision.send is True
+
+
+def test_ticker_cooldown_suppresses_repeat(conn):
+    # Once an alert for a ticker is recorded, a corroborated repeat is held.
+    db.record_alert(conn, "rss:CNBC", "prev", "TSLA")
+    item, det = _make(conn, priority=SourcePriority.SECONDARY.value,
+                      confidence=Confidence.MEDIUM, primary_found=True, corroborating=2)
+    cfg = dict(VGATE, ticker_cooldown_hours=6)
+    decision = feedback_learning.evaluate_alert(conn, det, item, cfg)
+    assert decision.send is False
+    assert decision.reason == "ticker_cooldown"

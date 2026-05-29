@@ -121,6 +121,9 @@ def load_alerting(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:
             "max_age_hours": 48,
             "social_requires_corroboration": True,
             "penalize_uncorroborated": True,
+            "require_corroboration": True,
+            "min_independent_sources": 2,
+            "ticker_cooldown_hours": 6,
         },
     )
 

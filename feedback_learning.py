@@ -194,6 +194,22 @@ def evaluate_alert(
     ):
         return AlertDecision(False, score, "unverified_social", parts)
 
+    # Cross-source verification gate — the core "intersect sources" rule:
+    #   * PRIMARY (Trump's own video/post/transcript) self-verifies → allowed.
+    #   * Any other claim must be CORROBORATED: either a PRIMARY source also
+    #     carries this ticker, OR >= min_independent_sources distinct sources
+    #     reported it (within the corroboration window). Otherwise it is HELD as
+    #     "awaiting_corroboration" (stored, not sent) — a lone unconfirmed
+    #     "Breaking: Trump said buy X" never alerts unless others confirm it.
+    if (
+        alerting.get("require_corroboration", True)
+        and det.source_priority != SourcePriority.PRIMARY.value
+    ):
+        min_sources = int(alerting.get("min_independent_sources", 2))
+        verified = det.primary_source_found or det.corroborating_sources >= min_sources
+        if not verified:
+            return AlertDecision(False, score, "awaiting_corroboration", parts)
+
     if det.confidence == Confidence.LOW and not alerting.get("send_low_confidence", False):
         return AlertDecision(False, score, "low_confidence_disabled", parts)
 
@@ -205,5 +221,11 @@ def evaluate_alert(
 
     if score < alerting.get("min_alert_score", 60):
         return AlertDecision(False, score, "below_min_score", parts)
+
+    # One alert per ticker within the cooldown, so a verified event doesn't spam
+    # (many outlets reporting the same call would otherwise each fire).
+    cooldown = int(alerting.get("ticker_cooldown_hours", 0) or 0)
+    if cooldown and db.recent_alert_for_ticker(conn, det.ticker, cooldown):
+        return AlertDecision(False, score, "ticker_cooldown", parts)
 
     return AlertDecision(True, score, "", parts)
