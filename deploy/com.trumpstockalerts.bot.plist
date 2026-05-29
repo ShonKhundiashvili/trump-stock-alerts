@@ -10,11 +10,11 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/shonsmac/Desktop/stock bot/trump-stock-alerts/deploy/run.sh</string>
+        <string>/Users/shonsmac/Apps/trump-stock-alerts/deploy/run.sh</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/shonsmac/Desktop/stock bot/trump-stock-alerts</string>
+    <string>/Users/shonsmac/Apps/trump-stock-alerts</string>
 
     <!-- Start at login and keep it alive: relaunch if it ever exits/crashes. -->
     <key>RunAtLoad</key>
@@ -27,8 +27,8 @@
     <integer>30</integer>
 
     <key>StandardOutPath</key>
-    <string>/Users/shonsmac/Desktop/stock bot/trump-stock-alerts/data/bot.out.log</string>
+    <string>/Users/shonsmac/Apps/trump-stock-alerts/data/bot.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/shonsmac/Desktop/stock bot/trump-stock-alerts/data/bot.err.log</string>
+    <string>/Users/shonsmac/Apps/trump-stock-alerts/data/bot.err.log</string>
 </dict>
 </plist>

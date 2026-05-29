@@ -4,13 +4,13 @@
 # controls cadence — set it to 30–60 on a dedicated host for near-instant alerts.
 set -euo pipefail
 
-APP_DIR="/Users/shonsmac/Desktop/stock bot/trump-stock-alerts"
+APP_DIR="/Users/shonsmac/Apps/trump-stock-alerts"
 cd "$APP_DIR"
 
-# Activate the project venv if present, else fall back to system python3.
-if [ -f ".venv/bin/activate" ]; then
-  # shellcheck disable=SC1091
-  source ".venv/bin/activate"
+# Use the project venv's interpreter directly (robust even if the venv was moved;
+# `activate` can hardcode an old path). Falls back to system python3.
+if [ -x ".venv/bin/python" ]; then
+  exec ".venv/bin/python" main.py
+else
+  exec python3 main.py
 fi
-
-exec python main.py
