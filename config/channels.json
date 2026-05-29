@@ -12,6 +12,9 @@
 
     "usaspending:": "contracts",
 
+    "polymarket:": "predictions",
+    "kalshi:": "predictions",
+
     "reddit:": "social",
 
     "gdelt:": "markets",

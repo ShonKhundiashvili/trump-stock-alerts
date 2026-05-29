@@ -13,6 +13,8 @@
     "newsapi": "SECONDARY",
     "youtube": "PRIMARY",
     "usaspending": "PRIMARY",
+    "polymarket": "PRIMARY",
+    "kalshi": "PRIMARY",
     "reddit": "SOCIAL_RUMOR"
   },
 

@@ -19,8 +19,10 @@ from alert_policy import assign_channel, assign_priority
 
 from .base import BaseSource
 from .gdelt_source import GDELTSource
+from .kalshi_source import KalshiSource
 from .news_search_source import NewsSearchSource
 from .newsapi_source import NewsAPISource
+from .polymarket_source import PolymarketSource
 from .rss_source import RSSSource
 from .truthsocial_source import TruthSocialSource
 from .usaspending_source import USASpendingSource
@@ -176,6 +178,24 @@ def build_sources(
             explicit_priority=us_cfg.get("priority", "PRIMARY"),
             require_keywords=us_cfg.get("require_keywords", []),  # company IS the subject
         ))
+
+    # --- Prediction markets (Polymarket / Kalshi) — relay to predictions #
+    pm_cfg = sources_config.get("polymarket", {})
+    if pm_cfg.get("enabled"):
+        src = PolymarketSource(conn=conn, max_markets=pm_cfg.get("max_markets", 100))
+        src.relay = True
+        sources.append(_finalize(src, priority_cfg,
+                                 explicit_priority=pm_cfg.get("priority", "PRIMARY"),
+                                 require_keywords=[]))
+
+    ks_cfg = sources_config.get("kalshi", {})
+    if ks_cfg.get("enabled"):
+        src = KalshiSource(conn=conn, api_key=settings.kalshi_api_key,
+                           max_markets=ks_cfg.get("max_markets", 200))
+        src.relay = True
+        sources.append(_finalize(src, priority_cfg,
+                                 explicit_priority=ks_cfg.get("priority", "PRIMARY"),
+                                 require_keywords=[]))
 
     # --- Generic public webpages / transcripts (PRIMARY) --------------- #
     web_cfg = sources_config.get("webpages", {})

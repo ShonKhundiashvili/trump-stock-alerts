@@ -102,6 +102,60 @@ def should_alert(det: DetectionResult, min_alert_rank: int) -> bool:
     return False
 
 
+def process_relay(conn, item, detector, alerter, alerting, rowid) -> None:
+    """Forward a pre-filtered prediction-market item to its channel as news.
+
+    Relay items (Polymarket/Kalshi) are already filtered to stock/crypto/M&A at
+    the source, so they bypass the buy-phrase detector + corroboration gate. We
+    still apply recency and dedup, opportunistically resolve a ticker for
+    display, and route to the item's channel (e.g. 'predictions').
+    """
+    # Prediction markets are standing news; use a longer window than news posts.
+    max_age = alerting.get("relay_max_age_hours", 168)
+    age = alert_policy.age_hours(item.timestamp)
+    if max_age and age is not None and age > max_age:
+        return  # too old (e.g. months-old standing market)
+
+    # Opportunistically resolve a ticker/company for display + routing context.
+    ticker = company = in_index = None
+    try:
+        dets = detector.detect(item.text)
+    except Exception:  # noqa: BLE001
+        dets = []
+    if dets:
+        best = max(dets, key=lambda d: d.confidence.rank())
+        ticker, company, in_index = best.ticker, best.company_name, best.in_index
+
+    det = DetectionResult(
+        company_name=company or (item.title or item.text)[:80],
+        ticker=ticker,
+        candidate_tickers=[],
+        confidence=Confidence.MEDIUM,
+        ticker_resolution_confidence=0.0,
+        matched_phrase=None,
+        text_excerpt=item.text,
+        detected_via="prediction-market",
+        direction="neutral",
+        in_index=in_index or "",
+        source_priority=item.priority,
+        verification_status=f"Prediction market ({item.source.split(':')[0]})",
+    )
+    detection_id = db.insert_detection(conn, item, det, rowid)
+    db.set_alert_score(conn, detection_id, alerting.get("min_alert_score", 60))
+
+    if db.alert_already_sent(conn, item.source, item.source_item_id, det.ticker):
+        return
+    if not db.record_alert(conn, item.source, item.source_item_id, det.ticker,
+                           detection_id, text_hash=item.text_hash):
+        return
+    sent, message_id, chat_id = alerter.send(item, det, detection_id=detection_id,
+                                             alert_score=alerting.get("min_alert_score", 60))
+    if sent:
+        db.mark_alert_sent(conn, detection_id)
+        db.update_alert_message(conn, detection_id, message_id, chat_id)
+        logger.info("RELAY [%s|%s] %s", item.source, item.channel, (item.title or "")[:80])
+
+
 def process_item(
     conn,
     item: SourceItem,
@@ -118,6 +172,11 @@ def process_item(
     rowid = db.insert_source_item(conn, item)
     if rowid is None:
         return  # already seen
+
+    # Relay sources (prediction markets) are pre-filtered and forwarded as-is.
+    if item.relay:
+        process_relay(conn, item, detector, alerter, alerting, rowid)
+        return
 
     # Non-primary sources only get classified if they actually mention Trump.
     if not _keyword_ok(item.text, require_keywords or []):

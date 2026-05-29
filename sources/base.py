@@ -28,6 +28,7 @@ class BaseSource(abc.ABC):
         self.name = name  # unique source key, e.g. "x:realDonaldTrump"
         self.priority: str = "PRIMARY"          # set by build_sources from config
         self.channel: str = "default"           # routing bucket (set by build_sources)
+        self.relay: bool = False                # forward items as-is (no detector)
         self.require_keywords: list[str] = []   # if set, only items containing one
                                                 # of these keywords are classified
 
@@ -55,6 +56,7 @@ class BaseSource(abc.ABC):
             for item in items:           # stamp provenance + routing onto every item
                 item.priority = self.priority
                 item.channel = self.channel
+                item.relay = self.relay
             logger.debug("[%s] fetched %d new item(s)", self.name, len(items))
             return items
         except Exception as exc:  # noqa: BLE001 - intentional broad catch

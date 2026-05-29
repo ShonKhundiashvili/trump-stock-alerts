@@ -101,6 +101,20 @@
     ]
   },
 
+  "polymarket": {
+    "enabled": true,
+    "_note": "Public Polymarket API. Stock/crypto/M&A prediction markets only (filtered); forwarded to the 'predictions' channel. Keyless.",
+    "max_markets": 100,
+    "priority": "PRIMARY"
+  },
+
+  "kalshi": {
+    "enabled": true,
+    "_note": "Public Kalshi market data (optional KALSHI_API_KEY). Stock/crypto/economy markets only; forwarded to the 'predictions' channel.",
+    "max_markets": 200,
+    "priority": "PRIMARY"
+  },
+
   "usaspending": {
     "enabled": true,
     "_note": "Official, free USAspending.gov API. Recent large federal CONTRACT awards to PUBLIC companies (e.g. defense deals). PRIMARY/factual. Tune min_amount to control volume.",

@@ -63,9 +63,10 @@ def test_youtube_transcript_fallback_is_safe():
     assert _fetch_transcript("___not_a_real_video___") == ""
 
 
-def _settings(youtube=None, newsapi=None):
+def _settings(youtube=None, newsapi=None, kalshi=None):
     return SimpleNamespace(
         x_bearer_token=None, youtube_api_key=youtube, newsapi_key=newsapi,
+        kalshi_api_key=kalshi,
     )
 
 
@@ -123,3 +124,69 @@ def test_usaspending_builds_as_primary(conn):
     us = [s for s in built if s.name.startswith("usaspending:")]
     assert us and us[0].priority == "PRIMARY"
     assert us[0].require_keywords == []  # company is the subject; no Trump filter
+
+
+# --- prediction markets (Polymarket / Kalshi) ------------------------------ #
+def test_prediction_filter_relevance():
+    from sources.prediction_filter import is_market_relevant
+    assert is_market_relevant("Will Tesla and SpaceX merge within the next year?")
+    assert is_market_relevant("Will Bitcoin hit $200k this year?")
+    assert is_market_relevant("Will S&P 500 hit 8,000 this year?")
+    assert is_market_relevant("Will NVDA invest in CoreWeave?")
+    # Politics / people / sports -> excluded.
+    assert not is_market_relevant("Will Karen Bass be re-elected as LA mayor?")
+    assert not is_market_relevant("Peter Thiel relocates to Argentina?")
+    assert not is_market_relevant("Who wins the NBA finals?")
+
+
+def test_polymarket_parses_and_filters(conn, monkeypatch):
+    import sources.polymarket_source as pm
+    payload = [
+        {"id": "1", "question": "Will Tesla and SpaceX merge in 2026?",
+         "slug": "tesla-spacex", "outcomePrices": "[\"0.80\", \"0.20\"]",
+         "startDate": "2026-05-29T10:00:00Z"},
+        {"id": "2", "question": "Will Karen Bass win LA mayor?",
+         "slug": "labass", "outcomePrices": "[\"0.4\",\"0.6\"]",
+         "startDate": "2026-05-29T10:00:00Z"},
+    ]
+
+    class _R:
+        status_code = 200
+
+        def json(self):
+            return payload
+    monkeypatch.setattr(pm.requests, "get", lambda *a, **k: _R())
+    items = pm.PolymarketSource(conn=conn).fetch_new_items()
+    assert len(items) == 1  # politics market filtered out
+    assert "Tesla and SpaceX merge" in items[0].text
+    assert "80% yes" in items[0].text
+
+
+def test_kalshi_parses_and_filters(conn, monkeypatch):
+    import sources.kalshi_source as ks
+    payload = {"markets": [
+        {"ticker": "KXNVDA", "title": "Will Nvidia acquire a chip startup in 2026?",
+         "category": "Companies", "last_price": 35, "open_time": "2026-05-29T10:00:00Z"},
+        {"ticker": "KXNBA", "title": "Who wins the NBA finals?",
+         "category": "Sports", "last_price": 50, "open_time": "2026-05-29T10:00:00Z"},
+    ]}
+
+    class _R:
+        status_code = 200
+
+        def json(self):
+            return payload
+    monkeypatch.setattr(ks.requests, "get", lambda *a, **k: _R())
+    items = ks.KalshiSource(conn=conn).fetch_new_items()
+    assert len(items) == 1
+    assert "Nvidia acquire" in items[0].text
+
+
+def test_prediction_sources_relay_and_route(conn):
+    cfg = {"polymarket": {"enabled": True}, "kalshi": {"enabled": True}}
+    built = build_sources(cfg, conn, _settings())
+    pm = [s for s in built if s.name.startswith("polymarket:")][0]
+    ks = [s for s in built if s.name.startswith("kalshi:")][0]
+    assert pm.relay and ks.relay
+    assert pm.channel == "predictions" and ks.channel == "predictions"
+    assert pm.priority == "PRIMARY"
