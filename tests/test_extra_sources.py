@@ -280,3 +280,13 @@ def test_market_news_routes_to_predictions(conn):
                           conn, _settings())
     mn = [s for s in built if s.name.startswith("marketnews:")]
     assert mn and mn[0].relay and mn[0].channel == "predictions"
+
+
+def test_opinion_listicle_filter():
+    from sources.prediction_filter import is_opinion_or_listicle as op
+    assert op("SpaceX IPO: How to Buy and Why You Shouldn't")
+    assert op("4 Things To Know As OpenAI Eyes IPO")
+    assert op("Jim Cramer previews SpaceX IPO: 3 catalysts to watch")
+    assert op("How SpaceX's Dream of a Record-Breaking IPO Stacks Up")
+    assert not op("SpaceX to go public at $1.8 trillion valuation")
+    assert not op("Anthropic nears $1 trillion valuation")

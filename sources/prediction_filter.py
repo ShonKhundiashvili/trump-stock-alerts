@@ -102,3 +102,27 @@ _WS = re.compile(r"\s+")
 
 def clean(text: str) -> str:
     return _WS.sub(" ", (text or "")).strip()
+
+
+# Opinion / how-to / listicle / clickbait — not a hard event, so not relevant.
+_OPINION_RE = re.compile(
+    r"\b(how to (buy|invest|trade|play)|why you (should|shouldn'?t|need)|"
+    r"should you (buy|invest|sell|own)|best (stock|crypto|etf)|"
+    r"stocks? to (buy|watch|consider|own)|things? to know|what to know|"
+    r"stacks up|is it (a buy|time to)|reasons? to (buy|sell|own)|ways to|"
+    r"here'?s why|previews?|prediction:|explained|could make you|"
+    r"motley fool|is it worth|deep dive|what it means|catalysts? to watch|"
+    r"forget |skyrocket|before it'?s too late|you won'?t believe|"
+    r"\btrap\b|could be down|history says|here are)\b",
+    re.I,
+)
+_LISTICLE_RE = re.compile(
+    r"^\W*\d+\s+(things|stocks?|reasons?|ways?|charts?|etfs?|picks?|"
+    r"companies|trades?|moves?)\b", re.I)
+
+
+def is_opinion_or_listicle(title: str) -> bool:
+    """True for opinion/how-to/listicle headlines (not a hard, factual event)."""
+    if not title:
+        return False
+    return bool(_OPINION_RE.search(title) or _LISTICLE_RE.search(title))

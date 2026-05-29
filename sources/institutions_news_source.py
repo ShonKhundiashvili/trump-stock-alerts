@@ -15,6 +15,7 @@ from typing import List
 
 from models import SourceItem
 from .news_search_source import NewsSearchSource
+from .prediction_filter import is_opinion_or_listicle
 
 # A real holder ACTION must be named (not a passive "X holds shares" mention).
 _HOLDERS = ("blackrock", "vanguard", "state street", "berkshire", "fidelity",
@@ -39,7 +40,7 @@ _EXCLUDE_RE = re.compile(
 
 def institution_action_relevant(title: str) -> bool:
     """True only for an actual big-holder action (stake change / 13D-G / activist)."""
-    if not title:
+    if not title or is_opinion_or_listicle(title):
         return False
     t = title.lower()
     if not any(h in t for h in _HOLDERS):

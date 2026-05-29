@@ -15,9 +15,10 @@ from typing import List
 
 from models import SourceItem
 from .news_search_source import NewsSearchSource
+from .prediction_filter import is_opinion_or_listicle
 
 _SUBJECT = (
-    "stock", "shares", "market", "wall street", "s&p", "nasdaq", "dow",
+    "stock", "shares", "market", "wall street", "buffett indicator", "s&p", "nasdaq", "dow",
     "bitcoin", "btc", "ethereum", "crypto", "solana", "xrp", "dogecoin",
     "spacex", "tesla", "nvidia", "apple", "microsoft", "amazon", "meta",
     "google", "openai", "palantir", "coreweave", "anthropic", "starlink",
@@ -33,7 +34,7 @@ _EVENT_RE = re.compile(
 
 def market_news_notable(title: str) -> bool:
     """True only for a notable stock/crypto market event (not routine news)."""
-    if not title:
+    if not title or is_opinion_or_listicle(title):
         return False
     t = f" {title.lower()} "
     return any(s in t for s in _SUBJECT) and bool(_EVENT_RE.search(title))
