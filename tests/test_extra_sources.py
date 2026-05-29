@@ -251,3 +251,15 @@ def test_new_relay_sources_route(conn):
     by = {s.name.split(":")[0]: s for s in built}
     assert by["ratings"].relay and by["ratings"].channel == "ratings"
     assert by["sec"].relay and by["sec"].channel == "institutions"
+
+
+def test_institution_action_filter():
+    from sources.institutions_news_source import institution_action_relevant as r
+    assert r("BlackRock takes 8.1% stake in Archer Aviation")
+    assert r("Vanguard discloses new 5% position in Acme Corp")
+    assert r("BlackRock files 13D on XYZ, activist stake")
+    assert r("Vanguard trims stake in Boeing")
+    # Noise: passive mention / price buzz / ratings -> excluded
+    assert not r("SLS stock hits 4-year high: BlackRock stake boost fuels buzz")
+    assert not r("Why Nvidia stock soared after BlackRock comments")
+    assert not r("Morgan Stanley upgrades Tesla to Overweight")

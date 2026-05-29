@@ -131,11 +131,12 @@
     "_note": "Year-round big-holder news (stocks + crypto) via Google News. Forwarded to 'institutions'.",
     "priority": "SECONDARY",
     "queries": [
-      "BlackRock stake company",
-      "Vanguard increases stake",
-      "BlackRock buys Bitcoin ETF",
-      "BlackRock Vanguard 13D 13G stake",
-      "institutional investor takes stake"
+      "BlackRock takes stake",
+      "Vanguard new stake",
+      "BlackRock acquires shares",
+      "BlackRock Vanguard 13D filing",
+      "activist investor takes stake",
+      "BlackRock Bitcoin ETF buys"
     ]
   },
 

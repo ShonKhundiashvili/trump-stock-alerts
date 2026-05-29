@@ -125,6 +125,9 @@ def process_relay(conn, item, detector, alerter, alerting, rowid, stats=None) ->
     """
     # Prediction markets are "standing" (hot when traded) so skip recency for
     # them; news-type relay (ratings / SEC / institutional news) must be recent.
+    # Respect mutes (so the 🚫/🔕 buttons work on prediction/ratings/holder feeds).
+    if alerting.get("respect_muted_sources", True) and db.is_source_muted(conn, item.source):
+        return
     is_market = item.source.split(":")[0] in ("polymarket", "kalshi")
     max_age = 0 if is_market else alerting.get("relay_max_age_hours", 72)
     age = alert_policy.age_hours(item.timestamp)
@@ -169,6 +172,10 @@ def process_relay(conn, item, detector, alerter, alerting, rowid, stats=None) ->
     )
     detection_id = db.insert_detection(conn, item, det, rowid)
     db.set_alert_score(conn, detection_id, alerting.get("min_alert_score", 60))
+
+    if alerting.get("respect_muted_companies", True) and db.is_company_muted(conn, det.ticker):
+        db.set_alert_suppressed(conn, detection_id, "muted_company")
+        return
 
     # Relay alerts require their OWN destination (a separate chat or a forum
     # topic) — never fall back to the main chat, so prediction markets can't
