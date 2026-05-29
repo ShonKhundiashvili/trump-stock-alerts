@@ -215,17 +215,42 @@ def _yf_symbol(t: str) -> str:
     return t.replace(".", "-").upper()
 
 
+def _prepare_yfinance(yf) -> None:
+    """Make yfinance work in a restricted (launchd agent) context.
+
+    A macOS launchd agent runs with a minimal environment: it can't spawn
+    curl's threaded DNS resolver ("getaddrinfo() thread failed to start") and
+    can't open yfinance's default platform tz-cache ("unable to open database
+    file"). Pinning the cache to an app-local writable dir fixes the latter;
+    fetch_prices uses threads=False (sequential, main-thread resolver) for the
+    former. Both are idempotent and harmless in a normal shell / CI too.
+    """
+    try:
+        cache_dir = config_loader.DATA_DIR / "yf-cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        yf.set_tz_cache_location(str(cache_dir))
+    except Exception as exc:  # noqa: BLE001 - cache pinning is best-effort
+        logger.debug("Could not set yfinance tz cache location: %s", exc)
+
+
 def fetch_prices(tickers: List[str], period: str = "1y", chunk: int = 80) -> Dict[str, "object"]:
     """Download daily OHLCV for many tickers; returns {ticker: DataFrame}."""
     import yfinance as yf
+    _prepare_yfinance(yf)
     out: Dict[str, object] = {}
     syms = [_yf_symbol(t) for t in tickers]
     for i in range(0, len(syms), chunk):
         part = syms[i:i + chunk]
         for attempt in range(2):
             try:
+                # threads=False: download on the calling thread (sync DNS
+                # resolver). threads=True spawns one worker per symbol and each
+                # curl request spawns its own resolver thread, which fails in a
+                # launchd agent's restricted context ("getaddrinfo() thread
+                # failed to start"). Sequential is ~3 min for the full universe —
+                # fine for a once-daily scan — and works everywhere.
                 data = yf.download(part, period=period, interval="1d", group_by="ticker",
-                                   auto_adjust=True, threads=True, progress=False)
+                                   auto_adjust=True, threads=False, progress=False)
                 break
             except Exception as exc:  # noqa: BLE001
                 logger.warning("yf.download chunk %d failed (try %d): %s", i, attempt, exc)

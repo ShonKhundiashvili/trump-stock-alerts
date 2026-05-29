@@ -12,3 +12,6 @@ __pycache__/
 .venv/
 venv/
 db/
+
+data/*.log
+data/yf-cache/

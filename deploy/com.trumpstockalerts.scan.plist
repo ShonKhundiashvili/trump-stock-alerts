@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.trumpstockalerts.scan</string>
+
+    <!-- Run the daily equity scan (one pass, then exit). -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/shonsmac/Apps/trump-stock-alerts/deploy/scan.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/shonsmac/Apps/trump-stock-alerts</string>
+
+    <!-- Weekdays (Mon=1 … Fri=5) at 16:30 local time (= 9:30 AM ET, US open).
+         If the Mac was asleep at the trigger, launchd runs it on next wake. -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>30</integer></dict>
+    </array>
+
+    <!-- One-shot scheduled job: do NOT KeepAlive (that would relaunch it in a
+         loop) and do NOT RunAtLoad (only fire on the schedule above). -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/shonsmac/Apps/trump-stock-alerts/data/scan.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/shonsmac/Apps/trump-stock-alerts/data/scan.err.log</string>
+</dict>
+</plist>
