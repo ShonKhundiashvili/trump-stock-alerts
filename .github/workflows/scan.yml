@@ -1,14 +1,14 @@
-name: weekly-equity-scan
+name: daily-equity-scan
 
-# Weekly technical screener over the S&P 500 + Nasdaq-100 → Weekly Scan topic.
-# Monday ~12:30 UTC (pre-market ET). Research only, not financial advice.
+# Daily technical screener over the S&P 500 + Nasdaq-100 → Daily Scan topic.
+# Weekdays ~12:30 UTC (pre-market ET, Mon-Fri). Research only, not financial advice.
 on:
   schedule:
-    - cron: "30 12 * * 1"
+    - cron: "30 12 * * 1-5"
   workflow_dispatch: {}
 
 concurrency:
-  group: weekly-scan
+  group: daily-scan
   cancel-in-progress: false
 
 permissions:

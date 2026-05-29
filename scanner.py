@@ -465,7 +465,7 @@ def _build_report(regime, top, watchlist, avoid, universe_n) -> List[str]:
     """Compact, trade-ready format: one pick per 2 lines, just the numbers."""
     vix = f"{regime['vix']:.1f}" if regime["vix"] else "n/a"
     lines = [
-        f"📊 <b>Weekly Scan — {regime['regime']}</b> · {len(top)} picks · "
+        f"📊 <b>Daily Scan — {regime['regime']}</b> · {len(top)} picks · "
         f"VIX {vix} · breadth {regime['breadth']*100:.0f}%",
     ]
     if not top:
