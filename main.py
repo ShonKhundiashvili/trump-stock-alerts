@@ -143,11 +143,12 @@ def process_relay(conn, item, detector, alerter, alerting, rowid) -> None:
     detection_id = db.insert_detection(conn, item, det, rowid)
     db.set_alert_score(conn, detection_id, alerting.get("min_alert_score", 60))
 
-    # Relay alerts require their OWN channel chat — never fall back to the main
-    # chat (so prediction markets can't pollute the Trump/markets room).
-    if item.channel not in (alerter.channel_chats or {}):
+    # Relay alerts require their OWN destination (a separate chat or a forum
+    # topic) — never fall back to the main chat, so prediction markets can't
+    # pollute the Trump/markets room.
+    if not alerter.has_dedicated_route(item.channel):
         db.set_alert_suppressed(conn, detection_id, "no_channel")
-        logger.debug("Relay item has no dedicated channel chat; stored only: %s", item.source)
+        logger.debug("Relay item has no dedicated route; stored only: %s", item.source)
         return
 
     if db.alert_already_sent(conn, item.source, item.source_item_id, det.ticker):
@@ -292,7 +293,8 @@ def main(run_once: bool = False) -> None:
     )
     alerter = TelegramAlerter(settings.telegram_bot_token, settings.telegram_chat_id,
                               enable_feedback=settings.enable_feedback,
-                              channel_chats=settings.channel_chats)
+                              channel_chats=settings.channel_chats,
+                              channel_threads=config_loader.load_topics())
 
     if run_once:
         # One poll cycle then exit — used by scheduled runners (GitHub Actions/cron).

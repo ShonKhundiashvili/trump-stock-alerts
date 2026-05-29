@@ -92,19 +92,27 @@ def _relative_time(timestamp: Optional[str]) -> str:
 class TelegramAlerter:
     def __init__(self, bot_token: Optional[str], chat_id: Optional[str],
                  timeout: int = 15, enable_feedback: bool = True,
-                 channel_chats: Optional[dict] = None) -> None:
+                 channel_chats: Optional[dict] = None,
+                 channel_threads: Optional[dict] = None) -> None:
         self.bot_token = bot_token
         self.chat_id = chat_id
         self.timeout = timeout
         self.enable_feedback = enable_feedback
-        # channel name -> chat id; categories without an entry fall back to chat_id.
+        # channel -> separate chat id (optional); falls back to chat_id.
         self.channel_chats = channel_chats or {}
+        # channel -> forum topic id within the main group (one group, sub-threads).
+        self.channel_threads = channel_threads or {}
 
     def chat_for(self, channel: Optional[str]) -> Optional[str]:
         """Target chat id for a routing channel (falls back to the default chat)."""
         if channel and channel in self.channel_chats:
             return self.channel_chats[channel]
         return self.chat_id
+
+    def has_dedicated_route(self, channel: Optional[str]) -> bool:
+        """True if this channel has its own chat OR its own forum topic."""
+        return bool(channel and (channel in self.channel_chats
+                                 or channel in self.channel_threads))
 
     @property
     def enabled(self) -> bool:
@@ -186,6 +194,10 @@ class TelegramAlerter:
             "parse_mode": "HTML",
             "disable_web_page_preview": False,
         }
+        # Route to a forum topic (sub-thread) within the group, if configured.
+        thread = self.channel_threads.get(item.channel)
+        if thread:
+            payload["message_thread_id"] = thread
         if self.enable_feedback and detection_id is not None:
             payload["reply_markup"] = build_feedback_keyboard(detection_id)
 

@@ -1,0 +1,4 @@
+{
+  "_comment": "channel -> Telegram forum topic id (message_thread_id) within the main group. Filled in by the bot after you enable Topics + make the bot an admin. Empty = no topic routing (everything goes to the group's General thread).",
+  "_example": "trump: 2, predictions: 4 (numeric topic ids set by the bot)"
+}

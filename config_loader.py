@@ -122,6 +122,18 @@ def load_phrases(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:
     return _load_json(config_dir / "phrases.json", {"HIGH": [], "MEDIUM": []})
 
 
+def load_topics(config_dir: Path = CONFIG_DIR) -> Dict[str, int]:
+    """channel -> forum topic id (message_thread_id) within the main group."""
+    data = _load_json(config_dir / "topics.json", {})
+    out: Dict[str, int] = {}
+    for k, v in data.items():
+        if isinstance(v, int):
+            out[k] = v
+        elif isinstance(v, str) and v.lstrip("-").isdigit():
+            out[k] = int(v)
+    return out
+
+
 def load_channels(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:
     return _load_json(
         config_dir / "channels.json",
