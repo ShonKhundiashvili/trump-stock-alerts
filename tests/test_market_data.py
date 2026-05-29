@@ -5,7 +5,7 @@ These exercise the pure math only — no network. yfinance is never called here.
 
 from __future__ import annotations
 
-from market_data import Quote, too_late_flag, trade_plan
+from market_data import Quote, already_ran, too_late_flag, trade_plan
 
 
 def _q(price=100.0, atr=2.0, move_1d=0.0, move_5d=0.0) -> Quote:
@@ -80,3 +80,36 @@ def test_trade_plan_reports_reasonable_rr():
     # entry 100, stop 98 (risk 2), target 105 (reward 5) -> RR 2.5
     out = trade_plan(_q(price=100.0, atr=2.0), "bullish", 10000, 1.0)
     assert "RR 2.5" in out
+
+
+# --- already_ran (the too-late suppression gate) -------------------------- #
+def test_already_ran_bullish_big_5d_run_is_late():
+    # DELL-style +61% over ~5d -> already ran past a 12% threshold.
+    assert already_ran(_q(move_5d=0.61), "bullish", 12) is True
+
+
+def test_already_ran_bullish_moderate_run_is_late():
+    # HOOD-style +22% over ~5d.
+    assert already_ran(_q(move_5d=0.22), "bullish", 12) is True
+
+
+def test_already_ran_bullish_quiet_is_not_late():
+    # INTC-style flat 5d move -> price hasn't run, gate does NOT suppress.
+    assert already_ran(_q(move_5d=-0.001), "bullish", 12) is False
+
+
+def test_already_ran_triggers_on_single_day_spike():
+    assert already_ran(_q(move_1d=0.15, move_5d=0.02), "bullish", 12) is True
+
+
+def test_already_ran_bearish_uses_downside():
+    assert already_ran(_q(move_5d=-0.20), "bearish", 12) is True
+    assert already_ran(_q(move_5d=0.20), "bearish", 12) is False
+
+
+def test_already_ran_disabled_threshold_never_fires():
+    assert already_ran(_q(move_5d=0.61), "bullish", 0) is False
+
+
+def test_already_ran_none_quote_fails_open():
+    assert already_ran(None, "bullish", 12) is False

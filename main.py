@@ -117,17 +117,20 @@ def _relay_label(source: str) -> str:
     return _RELAY_LABELS.get(source.split(":")[0], "Market signal")
 
 
-def _enrich_trade_note(det: DetectionResult, settings, cache) -> None:
-    """Attach a price-reaction (too-late?) line + research trade plan to an alert.
+def _enrich_trade_note(det: DetectionResult, settings, cache,
+                       max_run_pct: float = 0.0) -> str:
+    """Attach a price-reaction (too-late?) line + research trade plan to an alert,
+    and decide whether the move already ran.
 
-    Best-effort: a data hiccup must never block an alert. Skipped when no ticker
-    resolved or settings/cache not provided (e.g. unit tests)."""
+    Returns a suppression reason ("already_ran") when the signal is too late, else
+    "". Best-effort: a data hiccup never blocks an alert (returns ""). Skipped when
+    no ticker resolved or settings not provided (e.g. unit tests)."""
     if not det.ticker or settings is None:
-        return
+        return ""
     try:
         q = market_data.quote(det.ticker, cache)
         if not q:
-            return
+            return ""
         lines = []
         flag = market_data.too_late_flag(q, det.direction)
         if flag:
@@ -137,8 +140,12 @@ def _enrich_trade_note(det: DetectionResult, settings, cache) -> None:
         if plan:
             lines.append(plan)
         det.trade_note = "\n".join(lines)
+        if market_data.already_ran(q, det.direction, max_run_pct):
+            return "already_ran"
+        return ""
     except Exception as exc:  # noqa: BLE001 - enrichment is best-effort
         logger.debug("Trade-note enrichment failed for %s: %s", det.ticker, exc)
+        return ""
 
 
 def process_relay(conn, item, detector, alerter, alerting, rowid, stats=None,
@@ -289,6 +296,28 @@ def process_item(
                          decision.reason, decision.score, item.source, det.ticker)
             continue
 
+        # Freshness gate for the Trump room: secondary "aftermath" news (Google
+        # News etc.) must be very recent so day-old/recirculated stories don't
+        # masquerade as fresh calls. Trump's OWN primary statements keep the
+        # normal recency window.
+        trump_news_max = alerting.get("trump_news_max_age_hours", 18)
+        if (item.channel == "trump" and item.priority != "PRIMARY" and trump_news_max):
+            age = alert_policy.age_hours(item.timestamp)
+            if age is not None and age > trump_news_max:
+                db.set_alert_suppressed(conn, detection_id, "stale_news")
+                logger.info("Suppressed (stale_news, %.0fh) %s / %s",
+                            age, item.source, det.ticker)
+                continue
+
+        # Already-ran gate: don't push a buy/sell signal whose move already
+        # happened (the opportunity is gone). Also attaches the price + plan note.
+        ran = _enrich_trade_note(det, settings, quote_cache,
+                                 max_run_pct=alerting.get("max_recent_run_pct", 12))
+        if ran:
+            db.set_alert_suppressed(conn, detection_id, ran)
+            logger.info("Suppressed (already_ran) %s — move already happened", det.ticker)
+            continue
+
         # Dedup: same source-item+ticker, OR same statement text reposted elsewhere.
         if db.alert_already_sent(conn, item.source, item.source_item_id, det.ticker):
             continue
@@ -300,7 +329,7 @@ def process_item(
                                detection_id, text_hash=item.text_hash):
             continue
 
-        _enrich_trade_note(det, settings, quote_cache)
+        # det.trade_note was already populated by the already-ran gate above.
         sent, message_id, chat_id = alerter.send(
             item, det, detection_id=detection_id, alert_score=decision.score
         )

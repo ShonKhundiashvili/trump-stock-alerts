@@ -76,6 +76,20 @@ def too_late_flag(q: Quote, direction: str = "bullish") -> str:
     return f"✅ fresh ({m5:+.1f}% over ~5d)"
 
 
+def already_ran(q: Optional["Quote"], direction: str, threshold_pct: float) -> bool:
+    """True if the move already happened — used to suppress 'too-late' buy/sell calls.
+
+    Bullish/neutral: a recent run-up of >= threshold (1d or 5d). Bearish: an
+    equivalent drop. Fails open (False) on missing data or a disabled threshold.
+    """
+    if not q or not threshold_pct:
+        return False
+    m1, m5 = q.move_1d * 100, q.move_5d * 100
+    if direction == "bearish":
+        return m1 <= -threshold_pct or m5 <= -threshold_pct
+    return m1 >= threshold_pct or m5 >= threshold_pct
+
+
 def trade_plan(q: Quote, direction: str, account_size: float, risk_pct: float,
                target_pct: float = 0.05) -> str:
     """Research trade plan: entry / ATR stop / target / position size. Not advice."""

@@ -173,6 +173,8 @@ def load_alerting(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:
             "ticker_cooldown_hours": 6,
             "relay_max_age_hours": 72,
             "cycle_summary": True,
+            "max_recent_run_pct": 12,
+            "trump_news_max_age_hours": 18,
         },
     )
 

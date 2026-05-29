@@ -16,5 +16,9 @@
   "ticker_cooldown_hours": 6,
   "_relay": "Prediction markets skip recency (hot-when-traded). News-type relay (ratings/SEC/institutional news) must be within relay_max_age_hours. Per-source caps + recency bound first-run volume.",
   "relay_max_age_hours": 72,
-  "cycle_summary": true
+  "cycle_summary": true,
+
+  "_timing": "Keep alerts fresh + actionable. already-ran: suppress a buy/sell signal whose stock already moved >= max_recent_run_pct (1d or 5d) — the move already happened. stale-news: Trump-room SECONDARY news (Google News aftermath) must be within trump_news_max_age_hours; Trump's own PRIMARY statements keep max_age_hours. Set either to 0 to disable.",
+  "max_recent_run_pct": 12,
+  "trump_news_max_age_hours": 18
 }
