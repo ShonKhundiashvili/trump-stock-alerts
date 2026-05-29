@@ -107,3 +107,51 @@ def test_buy_ticker_token_in_context(detector):
     by = _by_ticker(results)
     assert "DELL" in by
     assert by["DELL"].confidence == Confidence.HIGH
+
+
+# --- real-world Trump examples (must not be missed) ------------------------- #
+def test_real_dell_go_buy(detector):
+    by = _by_ticker(detector.detect("Go buy a Dell, they are amazing."))
+    assert by["DELL"].confidence == Confidence.HIGH
+
+
+def test_real_pltr_are_amazing(detector):
+    # bare ticker + praise ("are amazing") -> MEDIUM, even with no "stock" word.
+    by = _by_ticker(detector.detect("PLTR are amazing, they helped us in the war."))
+    assert "PLTR" in by
+    assert by["PLTR"].confidence == Confidence.MEDIUM
+
+
+def test_real_palantir_is_amazing(detector):
+    by = _by_ticker(detector.detect("Palantir is amazing, they helped us."))
+    assert by["PLTR"].confidence == Confidence.MEDIUM
+
+
+def test_real_intc_bought_and_up(detector):
+    # "he bought" (ownership) + "up 250%" (performance) -> HIGH.
+    by = _by_ticker(detector.detect("INTC is up 250% after he bought it."))
+    assert "INTC" in by
+    assert by["INTC"].confidence == Confidence.HIGH
+
+
+def test_real_amd_doing_amazing(detector):
+    by = _by_ticker(detector.detect("I think AMD is doing amazing things."))
+    assert by["AMD"].confidence == Confidence.MEDIUM
+
+
+def test_real_amp_is_dynamic_not_hardcoded(detector):
+    # AMP (Ameriprise) is NOT in the watchlist — proves full-universe detection.
+    by = _by_ticker(detector.detect("You should all buy AMP, great company."))
+    assert "AMP" in by
+    assert by["AMP"].confidence == Confidence.HIGH
+
+
+def test_contract_mention_stays_low(detector):
+    # A factual contract mention is not a stock-call -> must not alert (LOW).
+    by = _by_ticker(detector.detect("Boeing got a huge contract today."))
+    assert by["BA"].confidence == Confidence.LOW
+
+
+def test_performance_up_percent_is_medium(detector):
+    by = _by_ticker(detector.detect("NVDA is up 40% this week."))
+    assert by["NVDA"].confidence == Confidence.MEDIUM

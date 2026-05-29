@@ -49,6 +49,26 @@
         "name": "WSJ / Dow Jones — Markets",
         "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
         "priority": "SECONDARY"
+      },
+      {
+        "name": "CNN — Money",
+        "url": "http://rss.cnn.com/rss/money_latest.rss",
+        "priority": "SECONDARY"
+      },
+      {
+        "name": "Fox Business — Markets",
+        "url": "https://moxie.foxbusiness.com/google-publisher/markets.xml",
+        "priority": "SECONDARY"
+      },
+      {
+        "name": "Fox News — Politics",
+        "url": "https://moxie.foxnews.com/google-publisher/politics.xml",
+        "priority": "SECONDARY"
+      },
+      {
+        "name": "The Hill",
+        "url": "https://thehill.com/news/feed/",
+        "priority": "SECONDARY"
       }
     ]
   },
@@ -64,7 +84,14 @@
       "Trump investment company",
       "Trump shares stock",
       "Trump company stock market",
-      "realDonaldTrump stock"
+      "realDonaldTrump stock",
+      "Trump go buy",
+      "Trump praises company",
+      "Trump amazing company",
+      "Trump incredible company",
+      "Trump loves company stock",
+      "Trump stock soars",
+      "Trump Truth Social stock"
     ]
   },
 

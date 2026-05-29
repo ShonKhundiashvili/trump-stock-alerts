@@ -34,6 +34,11 @@ FALSE_POSITIVE_TOKENS = {
     "TV", "DC", "GOP", "NY", "CA", "US", "NATO", "EU", "UN", "FED", "DOJ",
     "CIA", "NSA", "DHS", "FDA", "EPA", "WTO", "USD", "GMT", "EST", "PST",
     "OK", "USA.", "U.S.", "U.S", "DNC", "RNC", "VP", "POTUS", "FLOTUS", "PM",
+    # News networks / wire services (usually publisher attributions, not tickers)
+    "MSN", "BBC", "CNN", "NPR", "PBS", "NBC", "CBS", "ABC", "MSNBC", "UPI",
+    "CNBC", "AFP", "PTI", "RT",
+    # Geographies / orgs that collide with tickers
+    "UK", "UAE", "NYC", "LA", "EU", "UN", "WHO", "IMF", "UAW", "DOD", "DHS",
 }
 
 # Common English words that also happen to be real tickers. On the *bare
@@ -72,7 +77,29 @@ CASHTAG_RE = re.compile(r"\$([A-Za-z]{1,6})(?:\.[A-Za-z]{1,2})?\b")
 UPPER_TOKEN_RE = re.compile(r"\b([A-Z]{2,6})\b")
 WORD_RE = re.compile(r"[a-z0-9']+")
 
+# Regex signals that aren't fixed phrases. Matched on lowercased text.
+# HIGH: ownership / explicit acquisition (incl. third-person "he bought").
+OWNERSHIP_RE = [
+    re.compile(r"\b(i|we|he|she|they)\s+(just\s+)?bought\b"),
+    re.compile(r"\bafter\s+(he|she|they|we|i)\s+bought\b"),
+    re.compile(r"\bbought\s+(it|in|shares|stock|into)\b"),
+]
+# MEDIUM: strong positive performance language ("up 250%", "soared 30%").
+PERFORMANCE_RE = [
+    re.compile(r"\bup\s+\d{1,4}(\.\d+)?\s*%"),
+    re.compile(r"\b\d{1,4}(\.\d+)?\s*%\s+(gain|higher|up|surge)"),
+    re.compile(r"\bsoar(ed|ing|s)?\b"),
+    re.compile(r"\bskyrocket(ed|ing|s)?\b"),
+    re.compile(r"\brecord\s+high\b"),
+]
+
 EXCERPT_MAX = 320
+
+# A buy/praise phrase must be within this many characters of a ticker mention to
+# count toward that ticker's confidence (keeps long documents precise).
+PROXIMITY_CHARS = 160
+
+_PL_RANK = {PhraseLevel.NONE: 0, PhraseLevel.MEDIUM: 1, PhraseLevel.HIGH: 2}
 
 
 def normalize(text: str) -> str:
@@ -141,9 +168,17 @@ class Detector:
         for phrase in self.high_phrases:
             if phrase in normalized_lower:
                 return PhraseLevel.HIGH, phrase
+        for rx in OWNERSHIP_RE:
+            m = rx.search(normalized_lower)
+            if m:
+                return PhraseLevel.HIGH, m.group(0)
         for phrase in self.medium_phrases:
             if phrase in normalized_lower:
                 return PhraseLevel.MEDIUM, phrase
+        for rx in PERFORMANCE_RE:
+            m = rx.search(normalized_lower)
+            if m:
+                return PhraseLevel.MEDIUM, m.group(0)
         return PhraseLevel.NONE, None
 
     # ------------------------------------------------------------------ #
@@ -178,57 +213,111 @@ class Detector:
         return run
 
     # ------------------------------------------------------------------ #
+    def _all_phrase_hits(self, lowered: str) -> List[Tuple[int, PhraseLevel, str]]:
+        """Every phrase/regex match with its char position and level."""
+        hits: List[Tuple[int, PhraseLevel, str]] = []
+        for phrase in self.high_phrases:
+            start = lowered.find(phrase)
+            while start != -1:
+                hits.append((start, PhraseLevel.HIGH, phrase))
+                start = lowered.find(phrase, start + 1)
+        for rx in OWNERSHIP_RE:
+            for m in rx.finditer(lowered):
+                hits.append((m.start(), PhraseLevel.HIGH, m.group(0)))
+        for phrase in self.medium_phrases:
+            start = lowered.find(phrase)
+            while start != -1:
+                hits.append((start, PhraseLevel.MEDIUM, phrase))
+                start = lowered.find(phrase, start + 1)
+        for rx in PERFORMANCE_RE:
+            for m in rx.finditer(lowered):
+                hits.append((m.start(), PhraseLevel.MEDIUM, m.group(0)))
+        return hits
+
+    @staticmethod
+    def _nearest_phrase(
+        phrase_hits: List[Tuple[int, PhraseLevel, str]], positions: List[int]
+    ) -> Tuple[PhraseLevel, Optional[str]]:
+        """Best phrase within PROXIMITY_CHARS of any of the ticker's positions.
+
+        This ensures a buy/praise phrase is actually *near* the ticker mention,
+        not just somewhere in a long document — so "X soars" in a market roundup
+        that also names ten other tickers doesn't tag all of them.
+        """
+        best_level, best_phrase = PhraseLevel.NONE, None
+        for ppos, plevel, ptext in phrase_hits:
+            for tpos in positions:
+                if abs(ppos - tpos) <= PROXIMITY_CHARS:
+                    if _PL_RANK[plevel] > _PL_RANK[best_level]:
+                        best_level, best_phrase = plevel, ptext
+                    break
+            if best_level == PhraseLevel.HIGH:
+                break
+        return best_level, best_phrase
+
     def detect(self, text: str) -> List[DetectionResult]:
         normalized = normalize(text)
         if not normalized:
             return []
         lowered = normalized.lower()
 
-        phrase_level, matched_phrase = self.match_phrase(lowered)
+        phrase_hits = self._all_phrase_hits(lowered)
+        has_phrase = bool(phrase_hits)
         excerpt = normalized[:EXCERPT_MAX]
 
-        # ticker -> (CompanyMatch, detected_via)
-        resolved: Dict[str, Tuple[CompanyMatch, str]] = {}
-        # track names already resolved so we don't double-process
+        # ticker -> [CompanyMatch, detected_via, positions]
+        resolved: Dict[str, list] = {}
         seen_queries: set[str] = set()
 
+        def add(ticker: str, cm: "CompanyMatch", via: str, pos: int) -> None:
+            if ticker not in resolved:
+                resolved[ticker] = [cm, via, [pos]]
+            else:
+                resolved[ticker][2].append(pos)
+
         # 1. Cashtags ($DELL) — explicit ticker references.
-        cashtags = CASHTAG_RE.findall(normalized)
-        has_cashtag = bool(cashtags)
-        for sym in cashtags:
-            cm = self.resolver.resolve_ticker_token(sym)
+        has_cashtag = False
+        for m in CASHTAG_RE.finditer(normalized):
+            has_cashtag = True
+            cm = self.resolver.resolve_ticker_token(m.group(1))
             if cm and cm.ticker:
-                resolved.setdefault(cm.ticker, (cm, "cashtag"))
+                add(cm.ticker, cm, "cashtag", m.start())
 
         stock_context = self._has_stock_context(lowered, has_cashtag)
         caps_run_tokens = self._caps_run_tokens(normalized)
 
-        # 2. Bare uppercase ticker-like tokens (DELL) — only in stock context.
-        if stock_context:
-            for token in UPPER_TOKEN_RE.findall(normalized):
-                if token in FALSE_POSITIVE_TOKENS or token in COMMON_WORD_TICKERS:
-                    continue
-                # Skip tokens that are part of an all-caps heading / emphasis run
-                # (e.g. "DELIVERING A LOWER COST"), which aren't real tickers.
-                if token in caps_run_tokens:
-                    continue
-                cm = self.resolver.resolve_ticker_token(token)
-                # Only trust it if it actually exists in our universe.
-                if cm and cm.ticker and cm.strategy == "direct-ticker":
-                    resolved.setdefault(cm.ticker, (cm, "ticker-token"))
+        # 2. Bare uppercase ticker-like tokens (DELL, AMP, PLTR). Gated by length
+        #    because the full ~12k universe collides with many acronyms.
+        for m in UPPER_TOKEN_RE.finditer(normalized):
+            token = m.group(1)
+            if token in FALSE_POSITIVE_TOKENS or token in COMMON_WORD_TICKERS:
+                continue
+            if token in caps_run_tokens:
+                continue
+            # Skip tokens preceded by a number (units like "8 MMT", "100 MW").
+            if re.search(r"\d\s*$", normalized[max(0, m.start() - 6):m.start()]):
+                continue
+            if len(token) <= 3:
+                allow = stock_context or has_cashtag
+            else:
+                allow = stock_context or has_cashtag or has_phrase
+            if not allow:
+                continue
+            cm = self.resolver.resolve_ticker_token(token)
+            if cm and cm.ticker and cm.strategy == "direct-ticker":
+                add(cm.ticker, cm, "ticker-token", m.start())
 
         # 3. Watchlist aliases (case-insensitive, word-boundary).
         for alias_lower, original in self._alias_terms:
             if alias_lower in seen_queries:
                 continue
-            pattern = r"\b" + re.escape(alias_lower) + r"\b"
-            if re.search(pattern, lowered):
+            for m in re.finditer(r"\b" + re.escape(alias_lower) + r"\b", lowered):
                 seen_queries.add(alias_lower)
                 cm = self.resolver.resolve(original)
                 if cm and cm.ticker:
-                    resolved.setdefault(cm.ticker, (cm, "watchlist"))
+                    add(cm.ticker, cm, "watchlist", m.start())
 
-        # 4. spaCy NER organizations (dynamic — works beyond the watchlist).
+        # 4. spaCy NER organizations (dynamic — beyond the watchlist).
         if self._nlp is not None:
             try:
                 doc = self._nlp(normalized)
@@ -246,18 +335,20 @@ class Detector:
                         continue
                     if name.lower() in NER_NAME_STOPLIST:
                         continue
+                    # All-caps short tokens are tickers/acronyms — handled by the
+                    # gated bare-ticker path, not here.
+                    if name.isupper() and len(name) <= 5:
+                        continue
                     seen_queries.add(name.lower())
                     cm = self.resolver.resolve(name)
-                    # Require a stronger match for open-ended NER hits than for
-                    # watchlist/cashtag, to avoid fuzzy false positives.
                     if cm and cm.ticker and cm.resolution_confidence >= 90 and not cm.ambiguous:
-                        # don't clobber a higher-priority (watchlist) match
                         if cm.ticker not in resolved:
-                            resolved[cm.ticker] = (cm, "ner")
+                            resolved[cm.ticker] = [cm, "ner", [ent.start_char]]
 
-        # Build detection results.
+        # Build detection results, scoring each ticker by the NEAREST phrase.
         results: List[DetectionResult] = []
-        for ticker, (cm, via) in resolved.items():
+        for ticker, (cm, via, positions) in resolved.items():
+            phrase_level, matched_phrase = self._nearest_phrase(phrase_hits, positions)
             confidence = self._assign_confidence(cm, phrase_level)
             if confidence == Confidence.NONE:
                 continue
