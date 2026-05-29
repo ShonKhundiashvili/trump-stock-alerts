@@ -59,6 +59,7 @@ class SourceItem:
     timestamp: str              # ISO8601 timestamp of the item (best effort)
     title: Optional[str] = None
     priority: str = "PRIMARY"   # SourcePriority value, stamped by the adapter
+    channel: str = "default"    # routing bucket (e.g. trump / markets / contracts)
     canonical_url: Optional[str] = None
     text_hash: Optional[str] = None
 

@@ -109,8 +109,15 @@ phrase quality. Mutes and the score thresholds in `alerting.json` decide what
 sends — suppressed alerts are still stored with a reason. It never trains a model
 or edits code/config on its own.
 
-**Commands** (your chat only): `/stats`, `/mutes`, `/unmute_source <s>`,
+**Commands** (your chats only): `/stats`, `/mutes`, `/unmute_source <s>`,
 `/unmute_company <ticker>`, `/recent`, `/help`.
+
+**Separate channels (optional):** route categories to different Telegram chats so
+Trump's own announcements, market/other-politician news, contracts, and social
+chatter don't mix. `config/channels.json` maps sources to channels (`trump`,
+`markets`, `contracts`, `social`); each channel's chat id comes from
+`TELEGRAM_CHAT_<CHANNEL>` (e.g. `TELEGRAM_CHAT_TRUMP`). Add the bot to each chat;
+any channel without its own id falls back to `TELEGRAM_CHAT_ID`.
 
 Tables: `feedback`, `muted_sources`, `muted_companies`, `training_examples`, plus
 `alert_score` / `alert_suppressed_reason` on `detections`. Turn 🧪 examples into

@@ -43,6 +43,7 @@ class Settings:
     log_level: str
     min_alert_confidence: str  # HIGH | MEDIUM | LOW — minimum to send a Telegram alert
     enable_feedback: bool      # ENABLE_TELEGRAM_FEEDBACK — inline buttons + commands
+    channel_chats: Dict[str, str]  # channel name -> chat id (from TELEGRAM_CHAT_<NAME>)
 
     @property
     def telegram_enabled(self) -> bool:
@@ -81,7 +82,18 @@ def load_settings(dotenv_path: Optional[str] = None) -> Settings:
         min_alert_confidence=(os.getenv("MIN_ALERT_CONFIDENCE", "MEDIUM") or "MEDIUM").upper(),
         enable_feedback=(os.getenv("ENABLE_TELEGRAM_FEEDBACK", "true") or "true").lower()
         not in ("0", "false", "no", "off", ""),
+        channel_chats=_channel_chats_from_env(),
     )
+
+
+def _channel_chats_from_env() -> Dict[str, str]:
+    """Map channel -> chat id from TELEGRAM_CHAT_<NAME> vars (excludes the plain
+    TELEGRAM_CHAT_ID). e.g. TELEGRAM_CHAT_TRUMP=-100... -> {'trump': '-100...'}."""
+    chats: Dict[str, str] = {}
+    for key, value in os.environ.items():
+        if key.startswith("TELEGRAM_CHAT_") and key != "TELEGRAM_CHAT_ID" and value:
+            chats[key[len("TELEGRAM_CHAT_"):].lower()] = value
+    return chats
 
 
 def _load_json(path: Path, default: Any) -> Any:
@@ -106,6 +118,13 @@ def load_watchlist(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:
 
 def load_phrases(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:
     return _load_json(config_dir / "phrases.json", {"HIGH": [], "MEDIUM": []})
+
+
+def load_channels(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:
+    return _load_json(
+        config_dir / "channels.json",
+        {"default_channel": "default", "routes": {}},
+    )
 
 
 def load_alerting(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:

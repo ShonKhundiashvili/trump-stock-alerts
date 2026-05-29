@@ -91,11 +91,20 @@ def _relative_time(timestamp: Optional[str]) -> str:
 
 class TelegramAlerter:
     def __init__(self, bot_token: Optional[str], chat_id: Optional[str],
-                 timeout: int = 15, enable_feedback: bool = True) -> None:
+                 timeout: int = 15, enable_feedback: bool = True,
+                 channel_chats: Optional[dict] = None) -> None:
         self.bot_token = bot_token
         self.chat_id = chat_id
         self.timeout = timeout
         self.enable_feedback = enable_feedback
+        # channel name -> chat id; categories without an entry fall back to chat_id.
+        self.channel_chats = channel_chats or {}
+
+    def chat_for(self, channel: Optional[str]) -> Optional[str]:
+        """Target chat id for a routing channel (falls back to the default chat)."""
+        if channel and channel in self.channel_chats:
+            return self.channel_chats[channel]
+        return self.chat_id
 
     @property
     def enabled(self) -> bool:
@@ -170,8 +179,9 @@ class TelegramAlerter:
         buttons are attached so you can classify the alert from Telegram.
         """
         message = self.format_message(item, detection, alert_score=alert_score)
+        target_chat = self.chat_for(item.channel)
         payload = {
-            "chat_id": self.chat_id,
+            "chat_id": target_chat,
             "text": message,
             "parse_mode": "HTML",
             "disable_web_page_preview": False,
@@ -193,7 +203,7 @@ class TelegramAlerter:
                 return (False, None, None)
             result = resp.json().get("result", {})
             message_id = str(result.get("message_id")) if result.get("message_id") else None
-            chat_id = str(result.get("chat", {}).get("id")) if result.get("chat") else self.chat_id
+            chat_id = str(result.get("chat", {}).get("id")) if result.get("chat") else target_chat
             return (True, message_id, chat_id)
         except requests.RequestException as exc:
             logger.error("Telegram send error: %s", exc)

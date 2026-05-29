@@ -93,6 +93,22 @@ def age_hours(timestamp_str: str, now: Optional[datetime] = None) -> Optional[fl
 
 
 # --------------------------------------------------------------------------- #
+# channel routing
+# --------------------------------------------------------------------------- #
+def assign_channel(source_name: str, cfg: Dict) -> str:
+    """Resolve a source name to a routing channel (e.g. 'trump' / 'markets').
+
+    Longest matching prefix in cfg['routes'] wins; otherwise cfg['default_channel'].
+    """
+    routes: Dict[str, str] = cfg.get("routes", {})
+    name = (source_name or "").lower()
+    for key in sorted(routes, key=len, reverse=True):
+        if name.startswith(key.lower()):
+            return routes[key]
+    return cfg.get("default_channel", "default")
+
+
+# --------------------------------------------------------------------------- #
 # priority assignment
 # --------------------------------------------------------------------------- #
 def assign_priority(source_name: str, cfg: Dict) -> str:

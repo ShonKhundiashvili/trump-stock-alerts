@@ -225,7 +225,8 @@ def main(run_once: bool = False) -> None:
         anthropic_api_key=settings.anthropic_api_key,
     )
     alerter = TelegramAlerter(settings.telegram_bot_token, settings.telegram_chat_id,
-                              enable_feedback=settings.enable_feedback)
+                              enable_feedback=settings.enable_feedback,
+                              channel_chats=settings.channel_chats)
 
     if run_once:
         # One poll cycle then exit — used by scheduled runners (GitHub Actions/cron).
@@ -234,7 +235,8 @@ def main(run_once: bool = False) -> None:
         if settings.enable_feedback and settings.telegram_enabled:
             try:
                 feedback_bot.FeedbackBot(
-                    settings.telegram_bot_token, settings.telegram_chat_id, conn
+                    settings.telegram_bot_token, settings.telegram_chat_id, conn,
+                    extra_chat_ids=list(settings.channel_chats.values()),
                 ).drain()
             except Exception as exc:  # noqa: BLE001
                 logger.exception("Feedback drain error (continuing): %s", exc)

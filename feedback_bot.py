@@ -63,9 +63,12 @@ def parse_callback_data(data: str) -> Optional[Tuple[int, str]]:
 
 
 class FeedbackBot:
-    def __init__(self, bot_token: str, chat_id: str, conn, timeout: int = 25) -> None:
+    def __init__(self, bot_token: str, chat_id: str, conn, timeout: int = 25,
+                 extra_chat_ids=None) -> None:
         self.bot_token = bot_token
-        self.authorized_chat_id = str(chat_id)
+        self.primary_chat_id = str(chat_id)
+        # All chats allowed to give feedback/commands (default + per-channel chats).
+        self.authorized = {str(chat_id)} | {str(c) for c in (extra_chat_ids or []) if c}
         self.conn = conn
         self.timeout = timeout
 
@@ -88,9 +91,9 @@ class FeedbackBot:
     def _answer_callback(self, callback_id: str, text: str = "") -> None:
         self._api("answerCallbackQuery", {"callback_query_id": callback_id, "text": text[:200]})
 
-    def _send(self, text: str) -> None:
+    def _send(self, text: str, chat_id=None) -> None:
         self._api("sendMessage", {
-            "chat_id": self.authorized_chat_id, "text": text,
+            "chat_id": chat_id or self.primary_chat_id, "text": text,
             "parse_mode": "HTML", "disable_web_page_preview": True,
         })
 
@@ -106,7 +109,7 @@ class FeedbackBot:
 
     # -- authorization -------------------------------------------------- #
     def _authorized(self, chat_id) -> bool:
-        return str(chat_id) == self.authorized_chat_id
+        return str(chat_id) in self.authorized
 
     # -- callback handling ---------------------------------------------- #
     def handle_callback(self, cq: dict) -> None:
@@ -202,27 +205,27 @@ class FeedbackBot:
         arg = " ".join(parts[1:]).strip()
 
         if cmd == "/help":
-            self._send(self._help_text())
+            self._send(self._help_text(), chat_id)
         elif cmd == "/stats":
-            self._send(self._stats_text())
+            self._send(self._stats_text(), chat_id)
         elif cmd == "/mutes":
-            self._send(self._mutes_text())
+            self._send(self._mutes_text(), chat_id)
         elif cmd == "/recent":
-            self._send(self._recent_text())
+            self._send(self._recent_text(), chat_id)
         elif cmd == "/unmute_source":
             if not arg:
-                self._send("Usage: /unmute_source &lt;source&gt;")
+                self._send("Usage: /unmute_source &lt;source&gt;", chat_id)
             else:
                 ok = db.unmute_source(self.conn, arg)
-                self._send(f"{'Unmuted' if ok else 'Not muted'} source: {arg}")
+                self._send(f"{'Unmuted' if ok else 'Not muted'} source: {arg}", chat_id)
         elif cmd == "/unmute_company":
             if not arg:
-                self._send("Usage: /unmute_company &lt;ticker&gt;")
+                self._send("Usage: /unmute_company &lt;ticker&gt;", chat_id)
             else:
                 ok = db.unmute_company(self.conn, arg.upper())
-                self._send(f"{'Unmuted' if ok else 'Not muted'} company: {arg.upper()}")
+                self._send(f"{'Unmuted' if ok else 'Not muted'} company: {arg.upper()}", chat_id)
         else:
-            self._send("Unknown command. Try /help")
+            self._send("Unknown command. Try /help", chat_id)
 
     # -- command text builders ------------------------------------------ #
     @staticmethod
@@ -375,7 +378,8 @@ def start_in_thread(settings, stop_event: threading.Event) -> Optional[threading
     def _runner():
         conn = db.connect(settings.database_path)
         db.init_db(conn)
-        bot = FeedbackBot(settings.telegram_bot_token, settings.telegram_chat_id, conn)
+        bot = FeedbackBot(settings.telegram_bot_token, settings.telegram_chat_id, conn,
+                          extra_chat_ids=list(settings.channel_chats.values()))
         while not stop_event.is_set():
             try:
                 bot.run_forever(stop_event)

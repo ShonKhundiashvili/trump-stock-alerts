@@ -1,0 +1,32 @@
+{
+  "_comment": "Route alerts to separate Telegram chats so categories don't mix. A source maps to a channel (longest-matching prefix in 'routes'). Each channel's chat id comes from an env var TELEGRAM_CHAT_<CHANNEL> (e.g. TELEGRAM_CHAT_TRUMP). Channels with no env var fall back to TELEGRAM_CHAT_ID, so this is safe to leave unconfigured.",
+  "default_channel": "trump",
+  "routes": {
+    "rss:Trump — Truth Social": "trump",
+    "rss:White House": "trump",
+    "rss:Roll Call": "trump",
+    "youtube:": "trump",
+    "x:": "trump",
+    "truthsocial:": "trump",
+    "news_search:Trump": "trump",
+
+    "usaspending:": "contracts",
+
+    "reddit:": "social",
+
+    "gdelt:": "markets",
+    "newsapi:": "markets",
+    "rss:CNBC": "markets",
+    "rss:MarketWatch": "markets",
+    "rss:Yahoo Finance": "markets",
+    "rss:Benzinga": "markets",
+    "rss:WSJ": "markets",
+    "rss:CNN": "markets",
+    "rss:Fox": "markets",
+    "rss:The Hill": "markets",
+    "news_search:Treasury": "markets",
+    "news_search:Fed": "markets",
+    "news_search:Elon": "markets",
+    "news_search:White House": "markets"
+  }
+}

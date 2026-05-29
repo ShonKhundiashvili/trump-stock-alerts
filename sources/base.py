@@ -27,6 +27,7 @@ class BaseSource(abc.ABC):
         self.conn = conn
         self.name = name  # unique source key, e.g. "x:realDonaldTrump"
         self.priority: str = "PRIMARY"          # set by build_sources from config
+        self.channel: str = "default"           # routing bucket (set by build_sources)
         self.require_keywords: list[str] = []   # if set, only items containing one
                                                 # of these keywords are classified
 
@@ -51,8 +52,9 @@ class BaseSource(abc.ABC):
         """Wrapper that isolates failures so one bad source can't crash the bot."""
         try:
             items = self.fetch_new_items()
-            for item in items:           # stamp provenance tier onto every item
+            for item in items:           # stamp provenance + routing onto every item
                 item.priority = self.priority
+                item.channel = self.channel
             logger.debug("[%s] fetched %d new item(s)", self.name, len(items))
             return items
         except Exception as exc:  # noqa: BLE001 - intentional broad catch

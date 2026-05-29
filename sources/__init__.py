@@ -15,7 +15,7 @@ import sqlite3
 from typing import Any, Dict, List
 
 import config_loader
-from alert_policy import assign_priority
+from alert_policy import assign_channel, assign_priority
 
 from .base import BaseSource
 from .gdelt_source import GDELTSource
@@ -71,6 +71,7 @@ def build_sources(
 ) -> List[BaseSource]:
     """Instantiate enabled source adapters from config/sources.json."""
     priority_cfg = config_loader.load_source_priority()
+    channels_cfg = config_loader.load_channels()
     sources: List[BaseSource] = []
 
     # --- X / Twitter (official API) ------------------------------------- #
@@ -198,6 +199,10 @@ def build_sources(
                                   rss_url=ts_cfg.get("rss_url")),
                 priority_cfg))
 
+    # Route each source to its Telegram channel bucket.
+    for s in sources:
+        s.channel = assign_channel(s.name, channels_cfg)
+
     logger.info("Built %d source adapter(s): %s", len(sources),
-                ", ".join(f"{s.name}[{s.priority}]" for s in sources))
+                ", ".join(f"{s.name}[{s.priority}/{s.channel}]" for s in sources))
     return sources
