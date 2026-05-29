@@ -32,11 +32,15 @@ def conn():
 class _FakeAlerter:
     enable_feedback = False
 
-    def __init__(self):
+    def __init__(self, routed_channels=None):
         self.sent = []
+        # None => every channel has a room (default); else only these do.
+        self._routed = routed_channels
 
     def has_dedicated_route(self, channel):
-        return True
+        if self._routed is None:
+            return True
+        return channel in self._routed
 
     def send(self, item, det, detection_id=None, alert_score=None):
         self.sent.append((item, det))
@@ -95,11 +99,12 @@ def _last(conn):
     ).fetchone()
 
 
-def _run(conn, item, monkeypatch, move_5d=0.0, move_1d=0.0, det_kw=None):
+def _run(conn, item, monkeypatch, move_5d=0.0, move_1d=0.0, det_kw=None,
+         alerter=None):
     q = market_data.Quote("DELL", 100.0, 2.0, 2.0, move_1d, move_5d)
     monkeypatch.setattr(market_data, "quote", lambda t, cache=None: q)
     detector = _FakeDetector(**(det_kw or {}))
-    alerter = _FakeAlerter()
+    alerter = alerter or _FakeAlerter()
     main.process_item(conn, item, detector, _LLM, alerter, _ALERTING,
                       require_keywords=None, settings=_SETTINGS, quote_cache={})
     return alerter
@@ -149,3 +154,23 @@ def test_stale_gate_scoped_to_trump_channel(conn, monkeypatch):
     item = _item(priority="SECONDARY", channel="markets", hours_ago=30)
     alerter = _run(conn, item, monkeypatch, move_5d=0.0)
     assert len(alerter.sent) == 1
+
+
+# --- room invariant: never leak into General ------------------------------ #
+def test_channel_without_room_is_suppressed(conn, monkeypatch):
+    # A channel with no forum topic and no dedicated chat (e.g. 'social') must be
+    # suppressed, never sent to the group's General thread where rooms would mix.
+    item = _item(priority="PRIMARY", channel="social", hours_ago=1)
+    alerter = _run(conn, item, monkeypatch, move_5d=0.0,
+                   alerter=_FakeAlerter(routed_channels={"trump", "markets"}))
+    assert alerter.sent == []
+    assert _last(conn)["alert_suppressed_reason"] == "no_channel"
+
+
+def test_routed_channel_still_sends(conn, monkeypatch):
+    # A channel that DOES have a room still sends normally.
+    item = _item(priority="PRIMARY", channel="trump", hours_ago=1)
+    alerter = _run(conn, item, monkeypatch, move_5d=0.0,
+                   alerter=_FakeAlerter(routed_channels={"trump", "markets"}))
+    assert len(alerter.sent) == 1
+    assert _last(conn)["alert_sent"] == 1

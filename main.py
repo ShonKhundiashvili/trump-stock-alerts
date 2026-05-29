@@ -296,6 +296,16 @@ def process_item(
                          decision.reason, decision.score, item.source, det.ticker)
             continue
 
+        # Room invariant: only send if the channel has its OWN destination (a
+        # forum topic or a dedicated chat). A channel with neither (e.g. 'social'
+        # with no topic) would otherwise leak into the group's General thread and
+        # mix with other rooms — suppress it instead so rooms can't shuffle.
+        if not alerter.has_dedicated_route(item.channel):
+            db.set_alert_suppressed(conn, detection_id, "no_channel")
+            logger.info("Suppressed (no_channel) %s / %s — channel %r has no room",
+                        item.source, det.ticker, item.channel)
+            continue
+
         # Freshness gate for the Trump room: secondary "aftermath" news (Google
         # News etc.) must be very recent so day-old/recirculated stories don't
         # masquerade as fresh calls. Trump's OWN primary statements keep the
@@ -376,6 +386,33 @@ def run_cycle(conn, settings, detector, llm, alerter) -> None:
             logger.debug("Cycle summary send failed: %s", exc)
 
 
+def validate_routing(settings, alerter) -> None:
+    """Warn loudly if a room could silently misroute.
+
+    Logged at startup so misconfiguration is visible before alerts fire:
+      - a routed channel with no forum topic AND no dedicated chat (its alerts
+        are now suppressed by process_item, but you've lost a whole category), or
+      - the default catch-all channel itself having no destination.
+    Sources that fall through to the default channel are reported by build_sources.
+    """
+    channels = config_loader.load_channels()
+    routes = channels.get("routes", {})
+    default_channel = channels.get("default_channel", "default")
+    routed = set(routes.values()) | {default_channel}
+    homeless = sorted(c for c in routed if not alerter.has_dedicated_route(c))
+    if homeless:
+        logger.warning(
+            "Routing: channel(s) %s have NO forum topic and NO dedicated chat — "
+            "their alerts will be SUPPRESSED (add an entry to config/topics.json "
+            "or a TELEGRAM_CHAT_<NAME> env var to give them a room).", homeless)
+    if not alerter.has_dedicated_route(default_channel):
+        logger.warning(
+            "Routing: default channel %r has no room — any source that matches no "
+            "route would be suppressed.", default_channel)
+    logger.info("Routing OK: %d channel(s) routed, topics=%s",
+                len(routed), config_loader.load_topics())
+
+
 def _make_alerter(settings) -> TelegramAlerter:
     return TelegramAlerter(settings.telegram_bot_token, settings.telegram_chat_id,
                            enable_feedback=settings.enable_feedback,
@@ -448,6 +485,7 @@ def main(run_once: bool = False) -> None:
                               enable_feedback=settings.enable_feedback,
                               channel_chats=settings.channel_chats,
                               channel_threads=config_loader.load_topics())
+    validate_routing(settings, alerter)
 
     if run_once:
         # One poll cycle then exit — used by scheduled runners (GitHub Actions/cron).
