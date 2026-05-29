@@ -1,0 +1,67 @@
+name: poll-trump-stock-alerts
+
+# Runs one poll cycle on a schedule. GitHub cron is best-effort and is often
+# delayed under load (expect ~10-20 min between runs even with */15). You can
+# also trigger a run manually from the Actions tab (workflow_dispatch).
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+# Never run two cycles at once (they'd race on the shared state DB cache).
+concurrency:
+  group: poll
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m spacy download en_core_web_sm
+
+      # Restore the SQLite state DB from the most recent previous run so
+      # dedup + "last seen id" persist across runs.
+      - name: Restore state DB
+        uses: actions/cache/restore@v4
+        with:
+          path: alerts.db
+          key: alerts-db-${{ github.run_id }}
+          restore-keys: |
+            alerts-db-
+
+      - name: Run one poll cycle
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Optional — only used if you add them as repo secrets:
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MIN_ALERT_CONFIDENCE: MEDIUM
+          DATABASE_PATH: alerts.db
+          LOG_LEVEL: INFO
+        run: python main.py --once
+
+      # Save the updated state DB under a unique key (restore-keys picks it up
+      # next run). Old caches are auto-evicted by GitHub.
+      - name: Save state DB
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: alerts.db
+          key: alerts-db-${{ github.run_id }}

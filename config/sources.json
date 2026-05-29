@@ -1,0 +1,107 @@
+{
+  "x": {
+    "enabled": false,
+    "accounts": ["realDonaldTrump", "WhiteHouse", "POTUS", "PressSec"],
+    "max_results": 10,
+    "_note": "Disabled: X API now requires a paid plan with read credits. Set true once X_BEARER_TOKEN has credits. Priority: PRIMARY."
+  },
+
+  "rss": {
+    "enabled": true,
+    "feeds": [
+      {
+        "name": "Trump — Truth Social (public archive)",
+        "url": "https://trumpstruth.org/feed",
+        "priority": "PRIMARY"
+      },
+      {
+        "name": "White House — News",
+        "url": "https://www.whitehouse.gov/news/feed/",
+        "priority": "PRIMARY"
+      },
+      {
+        "name": "Roll Call",
+        "url": "https://rollcall.com/feed/",
+        "priority": "PRIMARY",
+        "_note": "General Roll Call feed. Factba.se (the canonical Trump-statement DB, now part of Roll Call) does not expose a stable public RSS we could verify; if you obtain one, add it here as PRIMARY."
+      },
+      {
+        "name": "CNBC — Top News",
+        "url": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+        "priority": "SECONDARY"
+      },
+      {
+        "name": "MarketWatch — Top Stories",
+        "url": "https://feeds.content.dowjones.io/public/rss/mw_topstories",
+        "priority": "SECONDARY"
+      },
+      {
+        "name": "Yahoo Finance",
+        "url": "https://finance.yahoo.com/news/rssindex",
+        "priority": "SECONDARY"
+      },
+      {
+        "name": "Benzinga",
+        "url": "https://www.benzinga.com/feed",
+        "priority": "SECONDARY"
+      },
+      {
+        "name": "WSJ / Dow Jones — Markets",
+        "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+        "priority": "SECONDARY"
+      }
+    ]
+  },
+
+  "news_search": {
+    "enabled": true,
+    "priority": "SECONDARY",
+    "_note": "Each query runs against Google News RSS. These are inherently Trump-scoped.",
+    "queries": [
+      "Trump buy stock",
+      "Trump says buy",
+      "Trump bought stock",
+      "Trump investment company",
+      "Trump shares stock",
+      "Trump company stock market",
+      "realDonaldTrump stock"
+    ]
+  },
+
+  "reddit": {
+    "enabled": false,
+    "_note": "SOCIAL_RUMOR early-warning layer. Noisy/unverified by design — alerts from here are capped at LOW and labelled unverified. Enable if you want a rumor feed.",
+    "feeds": [
+      {
+        "name": "wallstreetbets — trump",
+        "url": "https://www.reddit.com/r/wallstreetbets/search.rss?q=trump&restrict_sr=1&sort=new",
+        "priority": "SOCIAL_RUMOR"
+      },
+      {
+        "name": "stocks — trump",
+        "url": "https://www.reddit.com/r/stocks/search.rss?q=trump&restrict_sr=1&sort=new",
+        "priority": "SOCIAL_RUMOR"
+      }
+    ]
+  },
+
+  "webpages": {
+    "enabled": false,
+    "pages": [
+      {
+        "name": "Example transcript page",
+        "url": "https://example.com/transcript",
+        "selector": "article",
+        "min_interval_seconds": 1800,
+        "priority": "PRIMARY"
+      }
+    ]
+  },
+
+  "truthsocial": {
+    "enabled": false,
+    "accounts": ["realDonaldTrump"],
+    "rss_url": "",
+    "_note": "Direct Truth Social RSS is Cloudflare-protected (403). We do NOT bypass it. His posts are monitored compliantly via the trumpstruth.org public archive in the rss section. If a compliant feed/API becomes available, set rss_url and enabled=true."
+  }
+}

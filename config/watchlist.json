@@ -1,0 +1,62 @@
+{
+  "Dell Technologies": {
+    "ticker": "DELL",
+    "company_name": "Dell Technologies Inc.",
+    "aliases": ["Dell", "Dell Technologies"]
+  },
+  "Intel": {
+    "ticker": "INTC",
+    "company_name": "Intel Corporation",
+    "aliases": ["Intel"]
+  },
+  "Apple": {
+    "ticker": "AAPL",
+    "company_name": "Apple Inc.",
+    "aliases": ["Apple"]
+  },
+  "Nvidia": {
+    "ticker": "NVDA",
+    "company_name": "NVIDIA Corporation",
+    "aliases": ["Nvidia", "NVIDIA"]
+  },
+  "Tesla": {
+    "ticker": "TSLA",
+    "company_name": "Tesla, Inc.",
+    "aliases": ["Tesla"]
+  },
+  "Boeing": {
+    "ticker": "BA",
+    "company_name": "The Boeing Company",
+    "aliases": ["Boeing"]
+  },
+  "Microsoft": {
+    "ticker": "MSFT",
+    "company_name": "Microsoft Corporation",
+    "aliases": ["Microsoft"]
+  },
+  "Amazon": {
+    "ticker": "AMZN",
+    "company_name": "Amazon.com, Inc.",
+    "aliases": ["Amazon"]
+  },
+  "Alphabet": {
+    "ticker": "GOOGL",
+    "company_name": "Alphabet Inc.",
+    "aliases": ["Google", "Alphabet"]
+  },
+  "Meta": {
+    "ticker": "META",
+    "company_name": "Meta Platforms, Inc.",
+    "aliases": ["Meta", "Facebook"]
+  },
+  "AMD": {
+    "ticker": "AMD",
+    "company_name": "Advanced Micro Devices, Inc.",
+    "aliases": ["AMD", "Advanced Micro Devices"]
+  },
+  "Palantir": {
+    "ticker": "PLTR",
+    "company_name": "Palantir Technologies Inc.",
+    "aliases": ["Palantir"]
+  }
+}

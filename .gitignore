@@ -1,0 +1,14 @@
+.env
+.env.*
+*.key
+*.pem
+.DS_Store
+*.db
+*.db-wal
+*.db-shm
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+db/

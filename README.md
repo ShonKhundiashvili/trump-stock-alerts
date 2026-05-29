@@ -1,0 +1,335 @@
+# trump-stock-alerts
+
+A Telegram alert bot that monitors **public** Trump-related sources for mentions
+of public companies, tickers, stocks, or buy/investment-style language, then
+sends you a Telegram notification with the **original source link** and a
+**confidence level**.
+
+It does **not** rely only on a static watchlist — it dynamically recognizes
+public companies and tickers (via cashtags, ticker tokens, spaCy NER, and fuzzy
+matching against a local stock universe), even for companies you never manually
+added.
+
+---
+
+## What it does
+
+- Polls configured sources (X/Twitter official API, RSS/transcripts, public
+  webpages, Truth Social placeholder).
+- Normalizes text, detects companies/tickers/cashtags.
+- Resolves detected companies to stock tickers dynamically.
+- Detects buy/investment/stock-call language.
+- Assigns confidence: **HIGH / MEDIUM / LOW** (and **NONE** = no alert).
+- Stores every item and detection in SQLite.
+- Sends a Telegram alert (deduplicated per source-item + ticker).
+- Optionally adds an LLM "second opinion" (classification only) if a key is set.
+
+## What it does NOT do
+
+- ❌ No auto-trading. It never places orders.
+- ❌ No financial advice. It classifies text only; it never tells you to buy or sell.
+- ❌ No bypassing logins, paywalls, Cloudflare, rate limits, or Terms of Service.
+- ❌ No scraping of X — it uses the **official X API** only.
+- The Truth Social adapter is a **compliant placeholder** (see below).
+
+Every alert includes the original source link so **you verify manually**.
+
+---
+
+## Project layout
+
+```
+trump-stock-alerts/
+  main.py                 # continuous polling loop
+  detector.py             # detection pipeline (cashtags, tokens, NER, phrases)
+  ticker_resolver.py      # dynamic company -> ticker resolution
+  llm_classifier.py       # OPTIONAL LLM second opinion (classification only)
+  telegram_alerts.py      # Telegram Bot API alerter
+  db.py                   # SQLite storage + dedupe
+  models.py               # typed data models
+  config_loader.py        # env + JSON config loading
+  requirements.txt
+  README.md
+  .env.example
+  Dockerfile
+  docker-compose.yml
+  config/
+    sources.json          # which sources are enabled
+    watchlist.json         # priority aliases / overrides
+    phrases.json           # HIGH / MEDIUM phrase lists
+  data/
+    stock_universe.csv    # local ticker universe (fast, offline detection)
+  scripts/
+    update_stock_universe.py
+  sources/
+    base.py x_source.py rss_source.py webpage_source.py truthsocial_source.py
+  tests/
+    test_detector.py test_ticker_resolver.py test_db.py
+```
+
+---
+
+## Setup
+
+Requires **Python 3.11+**.
+
+```bash
+cd trump-stock-alerts
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python -m spacy download en_core_web_sm     # enables dynamic NER detection
+
+cp .env.example .env                          # then edit .env (see below)
+```
+
+> The bot still runs if the spaCy model isn't installed — it just falls back to
+> watchlist + cashtag + ticker-token detection (no open-ended NER).
+
+### Create a Telegram bot (BotFather)
+
+1. In Telegram, open **@BotFather**.
+2. Send `/newbot`, choose a name and a username ending in `bot`.
+3. BotFather returns a **bot token** — put it in `.env` as `TELEGRAM_BOT_TOKEN`.
+
+### Get your Telegram chat ID
+
+1. Send any message to your new bot (so it can message you back).
+2. Open in a browser (replace `<TOKEN>`):
+   `https://api.telegram.org/bot<TOKEN>/getUpdates`
+3. Find `"chat":{"id":...}` in the JSON. That number is your `TELEGRAM_CHAT_ID`.
+   (For a group chat the id is negative — that's expected.)
+
+### Add your X API token
+
+1. Get a bearer token from the X Developer Portal (official API).
+2. Put it in `.env` as `X_BEARER_TOKEN`.
+3. If you leave it blank, the X source is simply skipped.
+
+### (Optional) LLM key
+
+Set `OPENAI_API_KEY` **or** `ANTHROPIC_API_KEY` to enable the optional
+second-opinion classifier. Leave both blank to use rule-based detection only.
+Install the matching library: `pip install openai` or `pip install anthropic`.
+
+---
+
+## Configuration
+
+### `config/sources.json`
+
+Enable/disable sources and list what to monitor:
+
+```json
+{
+  "x":   { "enabled": true,  "accounts": ["realDonaldTrump"], "max_results": 10 },
+  "rss": { "enabled": true,  "feeds": [{ "name": "White House", "url": "https://.../feed/" }] },
+  "webpages": { "enabled": false, "pages": [
+      { "name": "Transcript", "url": "https://example.com/x", "selector": "article", "min_interval_seconds": 1800 }
+  ]},
+  "truthsocial": { "enabled": false, "accounts": ["realDonaldTrump"], "rss_url": "" }
+}
+```
+
+- **x** — accounts to monitor via the official X API. Default: `realDonaldTrump`.
+- **rss** — RSS/Atom feeds (great for **speeches/transcripts** — see note below).
+- **webpages** — public pages; optional CSS `selector`; `min_interval_seconds`
+  enforces respectful polling.
+- **truthsocial** — disabled placeholder; only set `rss_url` if you have a
+  compliant public feed (see `sources/truthsocial_source.py`).
+
+### `config/watchlist.json`
+
+Used **only** for priority aliases / manual overrides / disambiguation —
+detection is not limited to it. Ships with Dell, Intel, Apple, Nvidia, Tesla,
+Boeing, Microsoft, Amazon, Alphabet, Meta, AMD, Palantir.
+
+```json
+{ "Dell Technologies": { "ticker": "DELL", "company_name": "Dell Technologies Inc.", "aliases": ["Dell", "Dell Technologies"] } }
+```
+
+### `config/phrases.json`
+
+`HIGH` = explicit buy/invest language; `MEDIUM` = positive business language.
+A company/ticker mention with neither is classified `LOW`.
+
+### Controlling alert volume (`MIN_ALERT_CONFIDENCE`)
+
+Every detection is stored in SQLite, but only detections at/above
+`MIN_ALERT_CONFIDENCE` (in `.env`) are pushed to Telegram:
+
+- `HIGH` — only explicit buy/investment calls ("go out and buy a Dell").
+- `MEDIUM` (default) — also positive business language ("Tesla is a great company").
+- `LOW` — also any bare company/ticker mention. **Very noisy** — a single White
+  House fact sheet can name many companies. Not recommended for Telegram.
+
+Use `LOW` only if you want to capture everything; otherwise keep `MEDIUM`.
+
+### Source priority & cross-source verification (`config/source_priority.json`)
+
+Sources are grouped into provenance tiers, and the **final alert confidence**
+combines the text classification with where the information came from:
+
+| Tier | Examples | Max confidence on its own |
+|------|----------|---------------------------|
+| **PRIMARY** | Trump's posts (Truth Social archive / X), White House, Roll Call transcripts | **HIGH** (direct statement) |
+| **SECONDARY** | CNBC, MarketWatch, Yahoo, Benzinga, WSJ, Google-News keyword searches | **MEDIUM** from one source; **HIGH** only if corroborated (a PRIMARY source or ≥2 independent SECONDARY sources also have it) |
+| **SOCIAL_RUMOR** | Reddit search feeds, reposts | **LOW**, always labelled *"Unverified social signal — check primary source before acting."* |
+
+Every Telegram alert shows **Source priority**, **Verification** status, and
+**Primary source found: Yes/No**. Edit `config/source_priority.json` to retier a
+source (longest matching `overrides` prefix wins, then per-type `defaults`).
+
+Non-PRIMARY sources are filtered to items that actually mention Trump
+(`require_keywords`), so general market news doesn't trigger on every company.
+
+**`config/sources.json`** now has these groups (all editable):
+- `rss` — PRIMARY transcript feeds + SECONDARY news feeds (each with a `priority`).
+- `news_search` — Google-News RSS keyword templates (`"Trump says buy"`, etc.).
+- `reddit` — SOCIAL_RUMOR early-warning feeds (disabled by default — noisy).
+- `webpages`, `x`, `truthsocial` — as before.
+
+Cross-source **deduplication**: the same statement reported by multiple outlets
+alerts only once (matched by canonical URL + normalized text hash).
+
+### Update `data/stock_universe.csv`
+
+The bot resolves tickers from this local CSV (fast, no per-post network calls).
+A starter CSV of major US stocks ships with the repo. To refresh it from the
+public NASDAQ symbol directories:
+
+```bash
+python scripts/update_stock_universe.py
+```
+
+If the download is unavailable, the existing CSV is kept. You can also hand-edit
+it — columns: `ticker,company_name,exchange,country,asset_type`.
+
+---
+
+## Run locally
+
+```bash
+source .venv/bin/activate
+python main.py
+```
+
+Poll interval comes from `POLL_SECONDS` (default 60). Stop with `Ctrl+C`.
+If Telegram isn't configured, alerts are **logged** instead of sent (useful for
+a dry run).
+
+## Run tests
+
+```bash
+pip install pytest
+pytest                 # all tests
+pytest tests/test_detector.py -v
+```
+
+Tests don't require network access, the spaCy model, or any API keys.
+
+## Run 24/7 in the cloud (free)
+
+The bot only makes outbound calls (feeds → Telegram), so it doesn't need a public
+IP, domain, or open ports — just something that runs it on a schedule:
+
+- **[DEPLOY_GITHUB.md](DEPLOY_GITHUB.md)** — **GitHub Actions** (recommended free
+  option): runs every ~15 min in GitHub's cloud. **$0, no credit card, no server.**
+  Tokens stored as encrypted Actions secrets. Uses `python main.py --once`.
+- **[DEPLOY_ORACLE.md](DEPLOY_ORACLE.md)** — Oracle Cloud "Always Free" VM (also
+  $0, but signup needs a non-prepaid card and can be flaky).
+
+`python main.py --once` runs a single poll cycle and exits (for schedulers/cron);
+`python main.py` runs the continuous loop.
+
+## Run with Docker
+
+```bash
+cp .env.example .env    # fill in tokens
+docker compose up --build -d
+docker compose logs -f
+docker compose down
+```
+
+`docker-compose.yml` loads `.env`, mounts `config/` and `data/`, persists the
+SQLite DB in a named volume, and restarts unless stopped.
+
+## Run with systemd on a VPS
+
+Create `/etc/systemd/system/trump-stock-alerts.service`:
+
+```ini
+[Unit]
+Description=trump-stock-alerts
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/trump-stock-alerts
+ExecStart=/opt/trump-stock-alerts/.venv/bin/python main.py
+EnvironmentFile=/opt/trump-stock-alerts/.env
+Restart=always
+RestartSec=10
+User=botuser
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now trump-stock-alerts
+sudo journalctl -u trump-stock-alerts -f
+```
+
+---
+
+## Sample Telegram alert
+
+```
+🚨 Possible stock-related Trump mention
+
+Company: Dell Technologies Inc.
+Ticker: DELL
+Source: web:White House transcript
+Confidence: HIGH
+Ticker match confidence: 98
+Matched phrase: go out and buy
+Text: Go out and buy a Dell, they're great.
+Time: 2026-05-08T14:31:00Z
+Detected via: watchlist
+Link: https://example.com/original-source
+
+Not financial advice. Verify the source before acting.
+```
+
+---
+
+## Why speeches / transcripts matter
+
+Some market-moving comments are made in **speeches, press briefings, or
+interviews** and are never posted to social media. The RSS/transcript and
+webpage adapters exist so those public statements are monitored too — not just
+social posts.
+
+---
+
+## ⚠️ Warnings
+
+- **This is not financial advice.** The system only classifies text.
+- **Always verify the source manually** using the link in each alert. Detection
+  (especially fuzzy/NER matching and any LLM step) can be wrong.
+- It does not trade and never will on your behalf.
+
+## Limitations / TODOs
+
+- Truth Social: placeholder only. Wire in an **official API or compliant public
+  RSS** if/when available (see `sources/truthsocial_source.py`). No scraping.
+- Ticker resolution prefers US-listed equities and the watchlist; ambiguous
+  matches are flagged and never alerted as HIGH.
+- The starter `stock_universe.csv` is a small sample — run
+  `scripts/update_stock_universe.py` for full coverage.
+- spaCy NER quality depends on the installed model; consider a larger model for
+  better organization recognition.
+- X API access depends on your developer tier and rate limits.

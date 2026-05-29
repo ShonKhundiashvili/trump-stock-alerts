@@ -1,0 +1,20 @@
+services:
+  trump-stock-alerts:
+    build: .
+    container_name: trump-stock-alerts
+    env_file:
+      - .env
+    environment:
+      # Keep the SQLite DB inside the persisted db volume.
+      DATABASE_PATH: /app/db/alerts.db
+    volumes:
+      # Edit configs on the host without rebuilding the image.
+      - ./config:/app/config
+      # Persist / hand-edit the stock universe CSV and data files.
+      - ./data:/app/data
+      # Persist the SQLite database across restarts in a named volume.
+      - alerts-db:/app/db
+    restart: unless-stopped
+
+volumes:
+  alerts-db:

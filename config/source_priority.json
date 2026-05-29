@@ -1,0 +1,46 @@
+{
+  "_comment": "Maps a source name to its provenance tier. Resolution: longest matching 'overrides' prefix first, then per-type 'defaults' (the part before ':'), then DEFAULT. Tiers drive alert_policy: PRIMARY can reach HIGH on its own; SECONDARY needs corroboration for HIGH (else max MEDIUM); SOCIAL_RUMOR is capped at LOW and labelled unverified.",
+
+  "DEFAULT": "PRIMARY",
+
+  "defaults": {
+    "x": "PRIMARY",
+    "truthsocial": "PRIMARY",
+    "rss": "PRIMARY",
+    "webpage": "PRIMARY",
+    "news_search": "SECONDARY",
+    "reddit": "SOCIAL_RUMOR"
+  },
+
+  "overrides": {
+    "rss:Trump — Truth Social": "PRIMARY",
+    "rss:White House": "PRIMARY",
+    "rss:Roll Call": "PRIMARY",
+    "rss:CNBC": "SECONDARY",
+    "rss:MarketWatch": "SECONDARY",
+    "rss:Yahoo Finance": "SECONDARY",
+    "rss:Benzinga": "SECONDARY",
+    "rss:WSJ": "SECONDARY",
+    "rss:Dow Jones": "SECONDARY"
+  },
+
+  "tiers_reference": {
+    "PRIMARY": [
+      "X official API accounts",
+      "compliant Truth Social feed/API if configured",
+      "Roll Call / Factba.se Trump transcripts",
+      "White House public releases",
+      "White House YouTube/video transcript sources"
+    ],
+    "SECONDARY": [
+      "Reuters / Bloomberg (if a compliant feed/API is configured)",
+      "CNBC", "Benzinga", "MarketWatch", "Yahoo Finance", "WSJ / Dow Jones",
+      "Google News keyword searches"
+    ],
+    "SOCIAL_RUMOR": [
+      "Reddit RSS / search feeds",
+      "X search queries (if configured)",
+      "third-party repost / clip accounts"
+    ]
+  }
+}

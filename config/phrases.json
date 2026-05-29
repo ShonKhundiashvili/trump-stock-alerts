@@ -1,0 +1,32 @@
+{
+  "_comment": "HIGH = explicit buy/investment language. MEDIUM = positive business language. A company/ticker mention with neither is treated as LOW.",
+  "HIGH": [
+    "go out and buy",
+    "go buy",
+    "buy this",
+    "buy shares",
+    "buy stock",
+    "i bought",
+    "we bought",
+    "i own",
+    "we own",
+    "invest in",
+    "investment in",
+    "great stock",
+    "should buy",
+    "people should buy",
+    "worth buying"
+  ],
+  "MEDIUM": [
+    "great company",
+    "fantastic company",
+    "strong company",
+    "doing very well",
+    "i like",
+    "very good company",
+    "incredible company",
+    "successful company",
+    "great business",
+    "tremendous company"
+  ]
+}

@@ -1,0 +1,73 @@
+ticker,company_name,exchange,country,asset_type
+AAPL,Apple Inc.,NASDAQ,US,Equity
+MSFT,Microsoft Corporation,NASDAQ,US,Equity
+AMZN,"Amazon.com, Inc.",NASDAQ,US,Equity
+GOOGL,Alphabet Inc.,NASDAQ,US,Equity
+GOOG,Alphabet Inc.,NASDAQ,US,Equity
+META,"Meta Platforms, Inc.",NASDAQ,US,Equity
+NVDA,NVIDIA Corporation,NASDAQ,US,Equity
+TSLA,"Tesla, Inc.",NASDAQ,US,Equity
+INTC,Intel Corporation,NASDAQ,US,Equity
+AMD,"Advanced Micro Devices, Inc.",NASDAQ,US,Equity
+DELL,Dell Technologies Inc.,NYSE,US,Equity
+BA,The Boeing Company,NYSE,US,Equity
+PLTR,Palantir Technologies Inc.,NASDAQ,US,Equity
+F,Ford Motor Company,NYSE,US,Equity
+GM,General Motors Company,NYSE,US,Equity
+NFLX,"Netflix, Inc.",NASDAQ,US,Equity
+DIS,The Walt Disney Company,NYSE,US,Equity
+JPM,JPMorgan Chase & Co.,NYSE,US,Equity
+BAC,Bank of America Corporation,NYSE,US,Equity
+WFC,Wells Fargo & Company,NYSE,US,Equity
+GS,The Goldman Sachs Group Inc.,NYSE,US,Equity
+C,Citigroup Inc.,NYSE,US,Equity
+V,Visa Inc.,NYSE,US,Equity
+MA,Mastercard Incorporated,NYSE,US,Equity
+WMT,Walmart Inc.,NYSE,US,Equity
+HD,The Home Depot Inc.,NYSE,US,Equity
+COST,Costco Wholesale Corporation,NASDAQ,US,Equity
+KO,The Coca-Cola Company,NYSE,US,Equity
+PEP,"PepsiCo, Inc.",NASDAQ,US,Equity
+MCD,McDonald's Corporation,NYSE,US,Equity
+NKE,"NIKE, Inc.",NYSE,US,Equity
+SBUX,Starbucks Corporation,NASDAQ,US,Equity
+XOM,Exxon Mobil Corporation,NYSE,US,Equity
+CVX,Chevron Corporation,NYSE,US,Equity
+PFE,Pfizer Inc.,NYSE,US,Equity
+JNJ,Johnson & Johnson,NYSE,US,Equity
+MRNA,"Moderna, Inc.",NASDAQ,US,Equity
+UNH,UnitedHealth Group Incorporated,NYSE,US,Equity
+T,AT&T Inc.,NYSE,US,Equity
+VZ,Verizon Communications Inc.,NYSE,US,Equity
+CMCSA,Comcast Corporation,NASDAQ,US,Equity
+IBM,International Business Machines Corporation,NYSE,US,Equity
+ORCL,Oracle Corporation,NYSE,US,Equity
+CRM,"Salesforce, Inc.",NYSE,US,Equity
+ADBE,Adobe Inc.,NASDAQ,US,Equity
+CSCO,"Cisco Systems, Inc.",NASDAQ,US,Equity
+QCOM,"QUALCOMM Incorporated",NASDAQ,US,Equity
+TXN,Texas Instruments Incorporated,NASDAQ,US,Equity
+MU,"Micron Technology, Inc.",NASDAQ,US,Equity
+PYPL,"PayPal Holdings, Inc.",NASDAQ,US,Equity
+UBER,"Uber Technologies, Inc.",NYSE,US,Equity
+ABNB,"Airbnb, Inc.",NASDAQ,US,Equity
+COIN,"Coinbase Global, Inc.",NASDAQ,US,Equity
+SHOP,"Shopify Inc.",NYSE,US,Equity
+SNAP,Snap Inc.,NYSE,US,Equity
+SQ,Block Inc.,NYSE,US,Equity
+LMT,Lockheed Martin Corporation,NYSE,US,Equity
+RTX,RTX Corporation,NYSE,US,Equity
+GE,General Electric Company,NYSE,US,Equity
+CAT,Caterpillar Inc.,NYSE,US,Equity
+DE,Deere & Company,NYSE,US,Equity
+AXP,American Express Company,NYSE,US,Equity
+AAL,American Airlines Group Inc.,NASDAQ,US,Equity
+AIG,American International Group Inc.,NYSE,US,Equity
+DAL,"Delta Air Lines, Inc.",NYSE,US,Equity
+UAL,United Airlines Holdings Inc.,NASDAQ,US,Equity
+LUV,Southwest Airlines Co.,NYSE,US,Equity
+GME,GameStop Corp.,NYSE,US,Equity
+AMC,AMC Entertainment Holdings Inc.,NYSE,US,Equity
+DJT,Trump Media & Technology Group Corp.,NASDAQ,US,Equity
+RIVN,"Rivian Automotive, Inc.",NASDAQ,US,Equity
+LCID,"Lucid Group, Inc.",NASDAQ,US,Equity
