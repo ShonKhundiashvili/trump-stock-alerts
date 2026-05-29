@@ -21,7 +21,10 @@ from .base import BaseSource
 
 logger = logging.getLogger(__name__)
 
-FMP_FEED = "https://financialmodelingprep.com/api/v3/upgrades-downgrades-rss-feed"
+# FMP's "stable" API replaced the legacy /api/v3/upgrades-downgrades-rss-feed
+# (now 403 for accounts created after 2025-08-31). grades-latest-news is the
+# market-wide rating-changes feed and carries the same fields we parse below.
+FMP_FEED = "https://financialmodelingprep.com/stable/grades-latest-news"
 
 
 class RatingsSource(BaseSource):

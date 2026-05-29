@@ -272,7 +272,9 @@ def fetch_prices(tickers: List[str], period: str = "1y", chunk: int = 80) -> Dic
 # --------------------------------------------------------------------------- #
 # fundamentals (FMP — finalists only; degrades without a key)
 # --------------------------------------------------------------------------- #
-FMP = "https://financialmodelingprep.com/api/v3"
+# FMP retired the legacy /api/v3 path endpoints (403 for accounts created after
+# 2025-08-31) in favour of the "stable" API: a flat base + ?symbol= query form.
+FMP = "https://financialmodelingprep.com/stable"
 
 
 def fmp_fundamentals(symbol: str, api_key: Optional[str]):
@@ -282,21 +284,29 @@ def fmp_fundamentals(symbol: str, api_key: Optional[str]):
     import requests
     sector, company, notes, score = None, None, [], 0.0
     try:
-        prof = requests.get(f"{FMP}/profile/{symbol}", params={"apikey": api_key}, timeout=15).json()
+        def _get(ep, **extra):
+            r = requests.get(f"{FMP}/{ep}",
+                             params={"symbol": symbol, "apikey": api_key, **extra}, timeout=15)
+            data = r.json()
+            return data if isinstance(data, list) else []
+
+        prof = _get("profile")
         if prof:
             sector = prof[0].get("sector")
             company = prof[0].get("companyName")
-        ratios = requests.get(f"{FMP}/ratios-ttm/{symbol}", params={"apikey": api_key}, timeout=15).json()
-        grow = requests.get(f"{FMP}/income-statement-growth/{symbol}",
-                            params={"apikey": api_key, "limit": 1}, timeout=15).json()
+        ratios = _get("ratios-ttm")
+        grow = _get("income-statement-growth", limit=1)
         rt = ratios[0] if ratios else {}
         gr = grow[0] if grow else {}
         rev_g = gr.get("growthRevenue")
         ni_g = gr.get("growthNetIncome")
         net_m = rt.get("netProfitMarginTTM")
-        de = rt.get("debtEquityRatioTTM")
+        de = rt.get("debtToEquityRatioTTM")          # renamed from debtEquityRatioTTM
         fcf = rt.get("freeCashFlowPerShareTTM")
-        pe = rt.get("peRatioTTM")
+        # peRatioTTM no longer exists on ratios-ttm; derive P/E from price ÷ EPS.
+        price = prof[0].get("price") if prof else None
+        eps = rt.get("netIncomePerShareTTM")
+        pe = (price / eps) if (price and eps and eps > 0) else None
         if rev_g and rev_g > 0:
             score += 3; notes.append(f"rev growth {rev_g*100:.0f}%")
         if ni_g and ni_g > 0:
@@ -320,8 +330,10 @@ def fmp_recent_upgrade(symbol: str, api_key: Optional[str]) -> Optional[str]:
         return None
     import requests
     try:
-        g = requests.get(f"{FMP}/grade/{symbol}", params={"apikey": api_key, "limit": 5}, timeout=15).json()
-        for row in g or []:
+        r = requests.get(f"{FMP}/grades",
+                         params={"symbol": symbol, "apikey": api_key, "limit": 5}, timeout=15)
+        g = r.json()
+        for row in (g if isinstance(g, list) else []):
             ng = (row.get("newGrade") or "").lower()
             if any(k in ng for k in ("buy", "overweight", "outperform", "strong")):
                 return f"{row.get('gradingCompany')} → {row.get('newGrade')}"
