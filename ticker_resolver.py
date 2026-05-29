@@ -54,10 +54,12 @@ class TickerResolver:
         watchlist: Optional[Dict] = None,
         universe_path: Path = DEFAULT_UNIVERSE,
         enable_online: bool = False,
+        index_tickers: Optional[set] = None,
     ) -> None:
         self.watchlist = watchlist or {}
         self.universe_path = universe_path
         self.enable_online = enable_online
+        self.index_tickers = {t.upper() for t in (index_tickers or set())}
 
         # alias (lower) -> (ticker, canonical company name)
         self._alias_index: Dict[str, tuple[str, str]] = {}
@@ -224,8 +226,13 @@ class TickerResolver:
             rec = self._name_to_row.get(matched_name)
             if not rec:
                 continue
-            # US-equity preference: a small bonus so US listings outrank dupes.
-            adj = float(score) + (1.5 if self._is_us_equity(rec) else 0.0)
+            # Prefer US equities, and prefer S&P 500 / Nasdaq-100 members so an
+            # ambiguous name resolves to the major company, not an obscure dupe.
+            adj = float(score)
+            if self._is_us_equity(rec):
+                adj += 1.5
+            if rec["ticker"] in self.index_tickers:
+                adj += 3.0
             if rec["ticker"] in seen_tickers:
                 continue
             seen_tickers.add(rec["ticker"])

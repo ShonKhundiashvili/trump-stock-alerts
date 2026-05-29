@@ -48,7 +48,7 @@ class TelegramAlerter:
             "🚨 <b>Possible stock-related Trump mention</b>",
             "",
             f"<b>Company:</b> {e(company)}",
-            f"<b>Ticker:</b> {e(ticker)}",
+            f"<b>Ticker:</b> {e(ticker)}" + (f"  ({e(detection.in_index)})" if detection.in_index else ""),
             f"<b>Source:</b> {e(item.source)}",
             f"<b>Source priority:</b> {e(detection.source_priority)}",
             f"<b>Confidence:</b> {e(detection.confidence.value)}",

@@ -23,12 +23,16 @@ def detector():
         watchlist = json.load(fh)
     with (BASE_DIR / "config" / "phrases.json").open() as fh:
         phrases = json.load(fh)
+    with (BASE_DIR / "config" / "priority_tickers.json").open() as fh:
+        priority = json.load(fh)
     resolver = TickerResolver(
         watchlist=watchlist,
         universe_path=BASE_DIR / "data" / "stock_universe.csv",
         enable_online=False,
+        index_tickers=set(priority.get("ALL", [])),
     )
-    return Detector(resolver=resolver, phrases=phrases, watchlist=watchlist, use_spacy=False)
+    return Detector(resolver=resolver, phrases=phrases, watchlist=watchlist,
+                    priority_tickers=priority, use_spacy=False)
 
 
 def _by_ticker(results):
@@ -155,3 +159,30 @@ def test_contract_mention_stays_low(detector):
 def test_performance_up_percent_is_medium(detector):
     by = _by_ticker(detector.detect("NVDA is up 40% this week."))
     assert by["NVDA"].confidence == Confidence.MEDIUM
+
+
+# --- index-membership precision -------------------------------------------- #
+def test_offindex_acronym_with_only_praise_is_ignored(detector):
+    # NRC / SMR are off-index acronyms; praise alone (no stock word) must NOT
+    # surface them as tickers.
+    results = detector.detect("The NRC and SMR reactor program is amazing.")
+    tickers = {r.ticker for r in results}
+    assert "NRC" not in tickers
+    assert "SMR" not in tickers
+
+
+def test_offindex_with_real_stock_context_still_detected(detector):
+    # Off-index tickers are NOT ignored — with a real stock word they still fire.
+    by = _by_ticker(detector.detect("USAR stock is amazing, people are buying it."))
+    assert "USAR" in by  # USA Rare Earth, not in the index, still caught
+
+
+def test_index_membership_labelled(detector):
+    by = _by_ticker(detector.detect("Go buy a Dell, amazing."))
+    assert "S&P 500" in by["DELL"].in_index
+
+
+def test_index_ticker_praise_only_alerts(detector):
+    # PLTR is in the index -> praise alone is enough (MEDIUM).
+    by = _by_ticker(detector.detect("PLTR are amazing."))
+    assert by["PLTR"].confidence == Confidence.MEDIUM

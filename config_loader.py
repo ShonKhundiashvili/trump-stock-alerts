@@ -101,6 +101,13 @@ def load_phrases(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:
     return _load_json(config_dir / "phrases.json", {"HIGH": [], "MEDIUM": []})
 
 
+def load_priority_tickers(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:
+    return _load_json(
+        config_dir / "priority_tickers.json",
+        {"SP500": [], "NASDAQ100": [], "ALL": []},
+    )
+
+
 def load_source_priority(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:
     return _load_json(
         config_dir / "source_priority.json",

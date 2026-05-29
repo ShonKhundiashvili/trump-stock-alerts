@@ -121,6 +121,7 @@ class Detector:
         resolver: TickerResolver,
         phrases: Optional[Dict[str, List[str]]] = None,
         watchlist: Optional[Dict] = None,
+        priority_tickers: Optional[Dict] = None,
         spacy_model: str = "en_core_web_sm",
         use_spacy: bool = True,
     ) -> None:
@@ -129,10 +130,24 @@ class Detector:
         self.high_phrases = [p.lower() for p in phrases.get("HIGH", [])]
         self.medium_phrases = [p.lower() for p in phrases.get("MEDIUM", [])]
         self.watchlist = watchlist or {}
+        priority_tickers = priority_tickers or {}
+        self._sp500 = {t.upper() for t in priority_tickers.get("SP500", [])}
+        self._nasdaq100 = {t.upper() for t in priority_tickers.get("NASDAQ100", [])}
+        self._index_set = {t.upper() for t in priority_tickers.get("ALL", [])} \
+            or (self._sp500 | self._nasdaq100)
         self._alias_terms = self._build_alias_terms()
         self._nlp = None
         if use_spacy:
             self._nlp = self._load_spacy(spacy_model)
+
+    def _index_label(self, ticker: str) -> str:
+        t = (ticker or "").upper()
+        tags = []
+        if t in self._sp500:
+            tags.append("S&P 500")
+        if t in self._nasdaq100:
+            tags.append("Nasdaq-100")
+        return ", ".join(tags)
 
     # ------------------------------------------------------------------ #
     def _build_alias_terms(self) -> List[Tuple[str, str]]:
@@ -286,8 +301,13 @@ class Detector:
         stock_context = self._has_stock_context(lowered, has_cashtag)
         caps_run_tokens = self._caps_run_tokens(normalized)
 
-        # 2. Bare uppercase ticker-like tokens (DELL, AMP, PLTR). Gated by length
-        #    because the full ~12k universe collides with many acronyms.
+        # 2. Bare uppercase ticker-like tokens (DELL, AMP, PLTR).
+        #    Precision via INDEX MEMBERSHIP (S&P 500 / Nasdaq-100):
+        #      - index tickers: trusted with buy/praise language nearby;
+        #      - off-index tickers: require explicit stock context (a stray
+        #        acronym like NRC/SMR/MMT won't qualify on praise alone);
+        #      - <=2-char tickers (V, MU, GE): require explicit stock context
+        #        even when in-index, since they collide with ordinary words.
         for m in UPPER_TOKEN_RE.finditer(normalized):
             token = m.group(1)
             if token in FALSE_POSITIVE_TOKENS or token in COMMON_WORD_TICKERS:
@@ -297,15 +317,19 @@ class Detector:
             # Skip tokens preceded by a number (units like "8 MMT", "100 MW").
             if re.search(r"\d\s*$", normalized[max(0, m.start() - 6):m.start()]):
                 continue
-            if len(token) <= 3:
+            cm = self.resolver.resolve_ticker_token(token)
+            if not (cm and cm.ticker and cm.strategy == "direct-ticker"):
+                continue
+            in_index = cm.ticker in self._index_set
+            if len(token) <= 2:
                 allow = stock_context or has_cashtag
-            else:
+            elif in_index:
                 allow = stock_context or has_cashtag or has_phrase
+            else:
+                allow = stock_context or has_cashtag  # off-index needs a stock word
             if not allow:
                 continue
-            cm = self.resolver.resolve_ticker_token(token)
-            if cm and cm.ticker and cm.strategy == "direct-ticker":
-                add(cm.ticker, cm, "ticker-token", m.start())
+            add(cm.ticker, cm, "ticker-token", m.start())
 
         # 3. Watchlist aliases (case-insensitive, word-boundary).
         for alias_lower, original in self._alias_terms:
@@ -363,6 +387,7 @@ class Detector:
                     text_excerpt=excerpt,
                     ambiguous=cm.ambiguous,
                     detected_via=via,
+                    in_index=self._index_label(cm.ticker),
                 )
             )
         return results

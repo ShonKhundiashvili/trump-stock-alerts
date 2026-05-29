@@ -190,8 +190,13 @@ def run_cycle(conn, settings, detector, llm, alerter) -> None:
 def build_detector(settings) -> Detector:
     watchlist = config_loader.load_watchlist()
     phrases = config_loader.load_phrases()
-    resolver = TickerResolver(watchlist=watchlist, enable_online=False)
-    return Detector(resolver=resolver, phrases=phrases, watchlist=watchlist)
+    priority = config_loader.load_priority_tickers()
+    resolver = TickerResolver(
+        watchlist=watchlist, enable_online=False,
+        index_tickers=set(priority.get("ALL", [])),
+    )
+    return Detector(resolver=resolver, phrases=phrases, watchlist=watchlist,
+                    priority_tickers=priority)
 
 
 def main(run_once: bool = False) -> None:

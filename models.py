@@ -112,6 +112,7 @@ class DetectionResult:
     text_excerpt: str
     ambiguous: bool = False
     detected_via: str = ""           # cashtag / ticker-token / ner / watchlist
+    in_index: str = ""               # "S&P 500", "Nasdaq-100", both, or "" (off-index)
     llm_used: bool = False
     llm_reason: Optional[str] = None
     # Cross-source / provenance fields (filled by alert_policy after detection).
