@@ -112,8 +112,8 @@
   },
 
   "market_news": {
-    "enabled": true,
-    "_note": "Notable stock/crypto market NEWS (IPOs, mergers, record highs, big valuations) — the 'JUST IN' type Kalshi/Polymarket amplify. Keyless Google News, forwarded to the 'predictions' (stock/crypto) room.",
+    "enabled": false,
+    "_note": "DISABLED. The Predictions room is ONLY real Polymarket/Kalshi prediction markets (with odds), not news headlines. Re-enable only if you want a separate market-news room (and add a 'marketnews' topic route).",
     "priority": "SECONDARY",
     "queries": [
       "SpaceX IPO go public valuation",
