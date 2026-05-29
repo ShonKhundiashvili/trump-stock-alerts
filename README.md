@@ -27,6 +27,13 @@ your preferences (local, rule-based, transparent) to tune future alerts.
 - **Cross-source verification:** flags single-source/unverified "Breaking…" claims;
   HIGH needs a primary source or multiple independent sources.
 - **Human-in-the-loop:** inline Telegram buttons + commands; learns from your labels.
+- **Price reaction / too-late flag:** each alert shows the current price and
+  recent move, marking a signal “✅ fresh” or “⚠️ may be late”.
+- **Research trade plan + position sizing:** ATR-based entry/stop/target, R:R, and
+  a share count for your configured account size + risk % (`ACCOUNT_SIZE`,
+  `RISK_PCT`). Research framing only — never advice, never auto-trading.
+- **Signal performance tracking:** logs each alert’s forward return (+1d/+3d/+7d)
+  via yfinance and reports hit-rate + average move (`/performance`).
 - Stores everything in SQLite and de-dupes (per item, and across sources).
 
 ## Project layout
@@ -112,7 +119,7 @@ sends — suppressed alerts are still stored with a reason. It never trains a mo
 or edits code/config on its own.
 
 **Commands** (your chats only): `/stats`, `/mutes`, `/unmute_source <s>`,
-`/unmute_company <ticker>`, `/recent`, `/help`.
+`/unmute_company <ticker>`, `/recent`, `/performance [1d|3d|7d]`, `/scan`, `/help`.
 
 **Separate channels (optional):** route categories to different Telegram chats so
 Trump's own announcements, market/other-politician news, contracts, and social
@@ -133,6 +140,8 @@ HIGH · score 92 · CONFIRMED — primary source
 💬 "go out and buy": Go out and buy a Dell, they're great.
 🕒 2h ago · PRIMARY · rss:White House — News
 🔗 https://example.com/original-source
+📊 $122 · ✅ fresh (+1.2% over ~5d)
+📐 Plan (research): entry ~$122 · stop $118 (-3.3%) · target $128.1 (+5.0%) · RR 1.5 · ~25 sh for 1% risk ($100)
 Not financial advice.
 ```
 Verdicts: CONFIRMED / CORROBORATED / REPORTED / UNVERIFIED.
@@ -142,12 +151,17 @@ Verdicts: CONFIRMED / CORROBORATED / REPORTED / UNVERIFIED.
 ```bash
 python main.py            # continuous: polling + live feedback receiver
 python main.py --once     # one cycle + drain feedback (used by schedulers)
+python main.py --scan     # daily equity scan + refresh performance outcomes
+python main.py --perf     # refresh signal-performance outcomes only
 pytest                    # tests (no network/keys/spaCy model needed)
 ```
 
 **24/7 free:** GitHub Actions runs `--once` on a schedule — see
-**[DEPLOY_GITHUB.md](DEPLOY_GITHUB.md)**. For an always-on host (instant feedback),
-run `python main.py` on any small VM/Pi, or Docker: `docker compose up --build -d`.
+**[DEPLOY_GITHUB.md](DEPLOY_GITHUB.md)**.
+
+**Always-on (instant alerts, recommended):** run `python main.py` continuously
+with `POLL_SECONDS=45` — step-by-step for Mac (launchd) and a $5 VPS (systemd) in
+**[DEPLOY_ALWAYS_ON.md](DEPLOY_ALWAYS_ON.md)**. Or Docker: `docker compose up --build -d`.
 
 > On the scheduled (`--once`) runner, a button tap is acknowledged on the *next*
 > run (up to your interval later). For instant acknowledgement, run `main.py`

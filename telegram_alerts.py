@@ -190,6 +190,12 @@ class TelegramAlerter:
         if warning:
             lines.append(f"<b>{e(warning)}</b>")
 
+        # Price-reaction (too-late?) + research trade plan, if computed.
+        if detection.trade_note:
+            for note_line in detection.trade_note.split("\n"):
+                if note_line.strip():
+                    lines.append(e(note_line))
+
         lines.append("<i>Not financial advice.</i>")
         return "\n".join(lines)
 

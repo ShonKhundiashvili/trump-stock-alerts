@@ -119,6 +119,20 @@ CREATE TABLE IF NOT EXISTS training_examples (
     user_label          TEXT,
     created_at          TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS signal_performance (
+    detection_id   INTEGER PRIMARY KEY,
+    ticker         TEXT,
+    source         TEXT,
+    matched_phrase TEXT,
+    direction      TEXT,
+    alert_date     TEXT,
+    entry_price    REAL,
+    ret_1d         REAL,
+    ret_3d         REAL,
+    ret_7d         REAL,
+    updated_at     TEXT NOT NULL
+);
 """
 
 

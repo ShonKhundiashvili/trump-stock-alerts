@@ -213,6 +213,8 @@ class FeedbackBot:
             self._send(self._mutes_text(), chat_id)
         elif cmd == "/recent":
             self._send(self._recent_text(), chat_id)
+        elif cmd in ("/performance", "/perf"):
+            self._send(self._performance_text(arg), chat_id)
         elif cmd == "/scan":
             self._start_scan(chat_id)
         elif cmd == "/unmute_source":
@@ -264,6 +266,7 @@ class FeedbackBot:
             "/unmute_source &lt;source&gt; - unmute a source\n"
             "/unmute_company &lt;ticker&gt; - unmute a ticker\n"
             "/recent - last 5 alerts &amp; their feedback\n"
+            "/performance [1d|3d|7d] - signal hit-rate &amp; avg move\n"
             "/scan - run the weekly equity scan now (research only)\n"
             "/help - this message\n\n"
             "Tap the buttons under an alert to classify it. Learning is local, "
@@ -338,6 +341,18 @@ class FeedbackBot:
                 f"{sent} — {labels}"
             )
         return "\n".join(out)
+
+    def _performance_text(self, arg: str = "") -> str:
+        """Signal performance scorecard. Optional arg picks the horizon (1d/3d/7d)."""
+        import performance
+        horizon = {"1d": "ret_1d", "3d": "ret_3d", "7d": "ret_7d"}.get(
+            (arg or "").strip().lower().lstrip("+"), "ret_3d")
+        # Refresh outcomes on demand (best-effort) so /performance is current.
+        try:
+            performance.update_outcomes(self.conn)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("perf refresh on /performance failed: %s", exc)
+        return performance.summary(self.conn, horizon=horizon)
 
     # -- main loop ------------------------------------------------------- #
     def _get_offset(self) -> Optional[int]:

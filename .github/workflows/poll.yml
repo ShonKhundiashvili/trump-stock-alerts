@@ -58,6 +58,11 @@ jobs:
           FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
           MIN_ALERT_CONFIDENCE: MEDIUM
           ENABLE_TELEGRAM_FEEDBACK: "true"
+          # Trade-plan position sizing (research only). Set as repo Variables
+          # (Settings → Secrets and variables → Actions → Variables) to override
+          # the defaults (10000 / 1.0).
+          ACCOUNT_SIZE: ${{ vars.ACCOUNT_SIZE }}
+          RISK_PCT: ${{ vars.RISK_PCT }}
           DATABASE_PATH: alerts.db
           LOG_LEVEL: INFO
         run: python main.py --once

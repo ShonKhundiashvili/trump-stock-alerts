@@ -27,6 +27,7 @@ import config_loader
 import db
 import feedback_bot
 import feedback_learning
+import market_data
 from detector import Detector
 from llm_classifier import LLMClassifier
 from models import Confidence, DetectionResult, SourceItem, SourcePriority
@@ -116,7 +117,32 @@ def _relay_label(source: str) -> str:
     return _RELAY_LABELS.get(source.split(":")[0], "Market signal")
 
 
-def process_relay(conn, item, detector, alerter, alerting, rowid, stats=None) -> None:
+def _enrich_trade_note(det: DetectionResult, settings, cache) -> None:
+    """Attach a price-reaction (too-late?) line + research trade plan to an alert.
+
+    Best-effort: a data hiccup must never block an alert. Skipped when no ticker
+    resolved or settings/cache not provided (e.g. unit tests)."""
+    if not det.ticker or settings is None:
+        return
+    try:
+        q = market_data.quote(det.ticker, cache)
+        if not q:
+            return
+        lines = []
+        flag = market_data.too_late_flag(q, det.direction)
+        if flag:
+            lines.append(f"📊 ${q.price:g} · {flag}")
+        plan = market_data.trade_plan(q, det.direction, settings.account_size,
+                                      settings.risk_pct)
+        if plan:
+            lines.append(plan)
+        det.trade_note = "\n".join(lines)
+    except Exception as exc:  # noqa: BLE001 - enrichment is best-effort
+        logger.debug("Trade-note enrichment failed for %s: %s", det.ticker, exc)
+
+
+def process_relay(conn, item, detector, alerter, alerting, rowid, stats=None,
+                  settings=None, quote_cache=None) -> None:
     """Forward a pre-filtered prediction-market item to its channel as news.
 
     Relay items (Polymarket/Kalshi) are already filtered to stock/crypto/M&A at
@@ -191,6 +217,7 @@ def process_relay(conn, item, detector, alerter, alerting, rowid, stats=None) ->
     if not db.record_alert(conn, item.source, item.source_item_id, det.ticker,
                            detection_id, text_hash=item.text_hash):
         return
+    _enrich_trade_note(det, settings, quote_cache)
     sent, message_id, chat_id = alerter.send(item, det, detection_id=detection_id,
                                              alert_score=alerting.get("min_alert_score", 60))
     if sent:
@@ -210,6 +237,8 @@ def process_item(
     alerting: dict,
     require_keywords: list | None = None,
     stats: dict | None = None,
+    settings=None,
+    quote_cache: dict | None = None,
 ) -> None:
     # Stamp dedup keys before storage.
     item.canonical_url = alert_policy.canonicalize_url(item.url)
@@ -221,7 +250,8 @@ def process_item(
 
     # Relay sources (prediction markets, ratings, SEC) are forwarded as-is.
     if item.relay:
-        process_relay(conn, item, detector, alerter, alerting, rowid, stats)
+        process_relay(conn, item, detector, alerter, alerting, rowid, stats,
+                      settings=settings, quote_cache=quote_cache)
         return
 
     # Non-primary sources only get classified if they actually mention Trump.
@@ -270,6 +300,7 @@ def process_item(
                                detection_id, text_hash=item.text_hash):
             continue
 
+        _enrich_trade_note(det, settings, quote_cache)
         sent, message_id, chat_id = alerter.send(
             item, det, detection_id=detection_id, alert_score=decision.score
         )
@@ -290,6 +321,7 @@ def run_cycle(conn, settings, detector, llm, alerter) -> None:
     sources_config = config_loader.load_sources()
     sources = build_sources(sources_config, conn, settings)
     stats: dict = {}
+    quote_cache: dict = {}   # per-cycle price cache (one yfinance call per ticker)
     n_sources = n_errors = 0
     for source in sources:
         n_sources += 1
@@ -297,7 +329,8 @@ def run_cycle(conn, settings, detector, llm, alerter) -> None:
         for item in items:
             try:
                 process_item(conn, item, detector, llm, alerter, alerting,
-                             require_keywords=source.require_keywords, stats=stats)
+                             require_keywords=source.require_keywords, stats=stats,
+                             settings=settings, quote_cache=quote_cache)
             except Exception as exc:  # noqa: BLE001 - never crash the loop on one item
                 n_errors += 1
                 logger.exception("Error processing item %s: %s", item.fingerprint(), exc)
@@ -322,15 +355,32 @@ def _make_alerter(settings) -> TelegramAlerter:
 
 
 def run_weekly_scan(settings) -> None:
-    """Run the weekly equity scanner and post results to the Weekly Scan topic."""
+    """Run the daily equity scanner and post results to the Scan topic.
+
+    Also refreshes signal-performance outcomes (cheap, daily) so the
+    /performance scorecard stays current and a one-line summary rides along.
+    """
+    import performance
     import scanner
     config_loader.setup_logging(settings.log_level)
-    logger.info("Starting weekly equity scan…")
+    logger.info("Starting daily equity scan…")
+    alerter = _make_alerter(settings)
     try:
-        result = scanner.run_scan(settings, _make_alerter(settings))
-        logger.info("Weekly scan finished: %s", result)
+        result = scanner.run_scan(settings, alerter)
+        logger.info("Daily scan finished: %s", result)
     except Exception as exc:  # noqa: BLE001
-        logger.exception("Weekly scan failed: %s", exc)
+        logger.exception("Daily scan failed: %s", exc)
+    # Refresh price outcomes for past alerts + post the performance scorecard.
+    try:
+        conn = db.connect(settings.database_path)
+        db.init_db(conn)
+        performance.update_outcomes(conn)
+        if alerter.enabled:
+            channel = "weekly" if alerter.has_dedicated_route("weekly") else None
+            alerter.send_notice(performance.summary(conn), channel=channel)
+        conn.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Performance update failed: %s", exc)
 
 
 def build_detector(settings) -> Detector:
@@ -421,9 +471,23 @@ def main(run_once: bool = False) -> None:
     logger.info("Stopped.")
 
 
+def run_perf_update(settings) -> None:
+    """Standalone: refresh signal-performance outcomes (for a cron/manual run)."""
+    import performance
+    config_loader.setup_logging(settings.log_level)
+    conn = db.connect(settings.database_path)
+    db.init_db(conn)
+    n = performance.update_outcomes(conn)
+    logger.info("Performance update complete (%d outcomes). \n%s",
+                n, performance.summary(conn))
+    conn.close()
+
+
 if __name__ == "__main__":
     import sys
     if "--scan" in sys.argv:
         run_weekly_scan(config_loader.load_settings())
+    elif "--perf" in sys.argv:
+        run_perf_update(config_loader.load_settings())
     else:
         main(run_once="--once" in sys.argv)

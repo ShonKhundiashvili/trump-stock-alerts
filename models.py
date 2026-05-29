@@ -125,6 +125,7 @@ class DetectionResult:
     verification_status: str = ""
     primary_source_found: bool = False
     corroborating_sources: int = 0
+    trade_note: str = ""             # price-reaction + research trade plan (appended to alert)
 
     def is_alertable(self) -> bool:
         return self.confidence in (Confidence.HIGH, Confidence.MEDIUM, Confidence.LOW)

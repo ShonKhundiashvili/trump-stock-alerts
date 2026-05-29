@@ -1,0 +1,24 @@
+# systemd unit for an always-on Linux VPS (~$5/mo: Hetzner CX22, DigitalOcean,
+# Lightsail, Oracle Free Tier, etc.). Install:
+#   sudo cp deploy/trump-stock-alerts.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now trump-stock-alerts
+# Logs:  journalctl -u trump-stock-alerts -f
+# Edit User/paths below to match where you cloned the repo.
+
+[Unit]
+Description=trump-stock-alerts polling loop
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=botuser
+WorkingDirectory=/home/botuser/trump-stock-alerts
+EnvironmentFile=/home/botuser/trump-stock-alerts/.env
+ExecStart=/home/botuser/trump-stock-alerts/.venv/bin/python main.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -46,6 +46,8 @@ class Settings:
     min_alert_confidence: str  # HIGH | MEDIUM | LOW — minimum to send a Telegram alert
     enable_feedback: bool      # ENABLE_TELEGRAM_FEEDBACK — inline buttons + commands
     channel_chats: Dict[str, str]  # channel name -> chat id (from TELEGRAM_CHAT_<NAME>)
+    account_size: float        # for position-sizing in the trade plan (research only)
+    risk_pct: float            # % of account risked per idea (research only)
 
     @property
     def telegram_enabled(self) -> bool:
@@ -87,6 +89,8 @@ def load_settings(dotenv_path: Optional[str] = None) -> Settings:
         enable_feedback=(os.getenv("ENABLE_TELEGRAM_FEEDBACK", "true") or "true").lower()
         not in ("0", "false", "no", "off", ""),
         channel_chats=_channel_chats_from_env(),
+        account_size=float(os.getenv("ACCOUNT_SIZE", "10000") or 10000),
+        risk_pct=float(os.getenv("RISK_PCT", "1.0") or 1.0),
     )
 
 
