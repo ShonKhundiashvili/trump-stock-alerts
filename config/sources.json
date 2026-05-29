@@ -102,15 +102,15 @@
   },
 
   "polymarket": {
-    "enabled": true,
-    "_note": "Public Polymarket API. Stock/crypto/M&A prediction markets only (filtered); forwarded to the 'predictions' channel. Keyless.",
+    "enabled": false,
+    "_note": "Public Polymarket API. Stock/crypto/M&A prediction markets only (filtered); forwarded to the 'predictions' channel. Keyless. Enable only once you have a separate predictions room (set TELEGRAM_CHAT_PREDICTIONS) so it doesn't mix into your main chat.",
     "max_markets": 100,
     "priority": "PRIMARY"
   },
 
   "kalshi": {
-    "enabled": true,
-    "_note": "Public Kalshi market data (optional KALSHI_API_KEY). Stock/crypto/economy markets only; forwarded to the 'predictions' channel.",
+    "enabled": false,
+    "_note": "Public Kalshi market data (optional KALSHI_API_KEY). Stock/crypto/economy markets only; forwarded to the 'predictions' channel. Enable only with a separate predictions room (TELEGRAM_CHAT_PREDICTIONS).",
     "max_markets": 200,
     "priority": "PRIMARY"
   },
