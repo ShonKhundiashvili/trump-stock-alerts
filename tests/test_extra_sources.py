@@ -263,3 +263,20 @@ def test_institution_action_filter():
     assert not r("SLS stock hits 4-year high: BlackRock stake boost fuels buzz")
     assert not r("Why Nvidia stock soared after BlackRock comments")
     assert not r("Morgan Stanley upgrades Tesla to Overweight")
+
+
+def test_market_news_notable_filter():
+    from sources.market_news_source import market_news_notable as r
+    assert r("SpaceX reportedly looking to go public at valuation of $1.8 trillion")
+    assert r("Warren Buffett indicator hits all-time high — most expensive stock market")
+    assert r("Nvidia hits $5 trillion market cap")
+    assert r("Bitcoin hits all-time high above $150,000")
+    assert not r("Local bakery wins small business award")
+    assert not r("Trump praises economy at rally")
+
+
+def test_market_news_routes_to_predictions(conn):
+    built = build_sources({"market_news": {"enabled": True, "queries": ["SpaceX IPO"]}},
+                          conn, _settings())
+    mn = [s for s in built if s.name.startswith("marketnews:")]
+    assert mn and mn[0].relay and mn[0].channel == "predictions"

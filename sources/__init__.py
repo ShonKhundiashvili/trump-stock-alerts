@@ -21,6 +21,7 @@ from .base import BaseSource
 from .gdelt_source import GDELTSource
 from .institutions_news_source import InstitutionsNewsSource
 from .kalshi_source import KalshiSource
+from .market_news_source import MarketNewsSource
 from .news_search_source import NewsSearchSource
 from .newsapi_source import NewsAPISource
 from .polymarket_source import PolymarketSource
@@ -199,6 +200,16 @@ def build_sources(
         sources.append(_finalize(src, priority_cfg,
                                  explicit_priority=ks_cfg.get("priority", "PRIMARY"),
                                  require_keywords=[]))
+
+    # --- Hot market news (IPOs/mergers/records) — relay to predictions  #
+    mn_cfg = sources_config.get("market_news", {})
+    if mn_cfg.get("enabled"):
+        for q in mn_cfg.get("queries", []):
+            src = MarketNewsSource(conn=conn, query=q)
+            src.relay = True
+            sources.append(_finalize(src, priority_cfg,
+                                     explicit_priority=mn_cfg.get("priority", "SECONDARY"),
+                                     require_keywords=[]))
 
     # --- Analyst ratings (FMP, needs key) — relay to ratings ----------- #
     rt_cfg = sources_config.get("ratings", {})

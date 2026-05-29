@@ -105,6 +105,7 @@ def should_alert(det: DetectionResult, min_alert_rank: int) -> bool:
 _RELAY_LABELS = {
     "polymarket": "Prediction market (Polymarket)",
     "kalshi": "Prediction market (Kalshi)",
+    "marketnews": "Market news",
     "ratings": "Analyst rating",
     "sec": "SEC stake filing (13D/13G)",
     "instnews": "Institutional news",

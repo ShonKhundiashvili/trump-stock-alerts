@@ -111,6 +111,20 @@
     "priority": "PRIMARY"
   },
 
+  "market_news": {
+    "enabled": true,
+    "_note": "Notable stock/crypto market NEWS (IPOs, mergers, record highs, big valuations) — the 'JUST IN' type Kalshi/Polymarket amplify. Keyless Google News, forwarded to the 'predictions' (stock/crypto) room.",
+    "priority": "SECONDARY",
+    "queries": [
+      "SpaceX IPO go public valuation",
+      "company goes public IPO billion valuation",
+      "merger acquisition billion deal",
+      "stock market record all-time high",
+      "Bitcoin crypto all-time high record",
+      "Nvidia Tesla Apple market cap trillion"
+    ]
+  },
+
   "ratings": {
     "enabled": true,
     "_note": "Analyst upgrades/downgrades & price targets via Financial Modeling Prep. Needs FMP_API_KEY (free); skipped automatically when no key. Forwarded to the 'ratings' topic.",

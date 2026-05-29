@@ -15,6 +15,7 @@
     "usaspending": "PRIMARY",
     "polymarket": "PRIMARY",
     "kalshi": "PRIMARY",
+    "marketnews": "SECONDARY",
     "ratings": "PRIMARY",
     "sec": "PRIMARY",
     "instnews": "SECONDARY",
