@@ -124,6 +124,14 @@ def load_phrases(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:
     return _load_json(config_dir / "phrases.json", {"HIGH": [], "MEDIUM": []})
 
 
+def load_scanner(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:
+    return _load_json(
+        config_dir / "scanner.json",
+        {"min_score": 62, "min_rr": 1.5, "min_dollar_volume": 20000000,
+         "max_finalists": 18},
+    )
+
+
 def load_topics(config_dir: Path = CONFIG_DIR) -> Dict[str, int]:
     """channel -> forum topic id (message_thread_id) within the main group."""
     data = _load_json(config_dir / "topics.json", {})

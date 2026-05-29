@@ -64,13 +64,14 @@ def parse_callback_data(data: str) -> Optional[Tuple[int, str]]:
 
 class FeedbackBot:
     def __init__(self, bot_token: str, chat_id: str, conn, timeout: int = 25,
-                 extra_chat_ids=None) -> None:
+                 extra_chat_ids=None, settings=None) -> None:
         self.bot_token = bot_token
         self.primary_chat_id = str(chat_id)
         # All chats allowed to give feedback/commands (default + per-channel chats).
         self.authorized = {str(chat_id)} | {str(c) for c in (extra_chat_ids or []) if c}
         self.conn = conn
         self.timeout = timeout
+        self.settings = settings   # enables /scan (weekly equity scanner)
 
     # -- low-level API -------------------------------------------------- #
     def _api(self, method: str, payload: dict, timeout: Optional[int] = None) -> Optional[dict]:
@@ -212,6 +213,8 @@ class FeedbackBot:
             self._send(self._mutes_text(), chat_id)
         elif cmd == "/recent":
             self._send(self._recent_text(), chat_id)
+        elif cmd == "/scan":
+            self._start_scan(chat_id)
         elif cmd == "/unmute_source":
             if not arg:
                 self._send("Usage: /unmute_source &lt;source&gt;", chat_id)
@@ -227,6 +230,30 @@ class FeedbackBot:
         else:
             self._send("Unknown command. Try /help", chat_id)
 
+    def _start_scan(self, chat_id) -> None:
+        """Kick off the weekly equity scan in a background thread (best on a
+        continuous host; on the scheduled --once runner use the weekly workflow)."""
+        if not self.settings:
+            self._send("Scan unavailable here — it runs on the weekly schedule.", chat_id)
+            return
+        self._send("📊 Running equity scan now — results will post to the Weekly "
+                   "Scan topic in a few minutes. (Research only, not advice.)", chat_id)
+
+        def _run():
+            try:
+                import config_loader
+                import scanner
+                from telegram_alerts import TelegramAlerter
+                alerter = TelegramAlerter(
+                    self.settings.telegram_bot_token, self.settings.telegram_chat_id,
+                    channel_chats=self.settings.channel_chats,
+                    channel_threads=config_loader.load_topics())
+                scanner.run_scan(self.settings, alerter)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("Manual /scan failed: %s", exc)
+
+        threading.Thread(target=_run, name="manual-scan", daemon=True).start()
+
     # -- command text builders ------------------------------------------ #
     @staticmethod
     def _help_text() -> str:
@@ -237,6 +264,7 @@ class FeedbackBot:
             "/unmute_source &lt;source&gt; - unmute a source\n"
             "/unmute_company &lt;ticker&gt; - unmute a ticker\n"
             "/recent - last 5 alerts &amp; their feedback\n"
+            "/scan - run the weekly equity scan now (research only)\n"
             "/help - this message\n\n"
             "Tap the buttons under an alert to classify it. Learning is local, "
             "rule-based, and transparent. Not financial advice."
@@ -379,7 +407,8 @@ def start_in_thread(settings, stop_event: threading.Event) -> Optional[threading
         conn = db.connect(settings.database_path)
         db.init_db(conn)
         bot = FeedbackBot(settings.telegram_bot_token, settings.telegram_chat_id, conn,
-                          extra_chat_ids=list(settings.channel_chats.values()))
+                          extra_chat_ids=list(settings.channel_chats.values()),
+                          settings=settings)
         while not stop_event.is_set():
             try:
                 bot.run_forever(stop_event)

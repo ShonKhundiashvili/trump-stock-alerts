@@ -1,0 +1,37 @@
+name: weekly-equity-scan
+
+# Weekly technical screener over the S&P 500 + Nasdaq-100 → Weekly Scan topic.
+# Monday ~12:30 UTC (pre-market ET). Research only, not financial advice.
+on:
+  schedule:
+    - cron: "30 12 * * 1"
+  workflow_dispatch: {}
+
+concurrency:
+  group: weekly-scan
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run weekly scan
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+          LOG_LEVEL: INFO
+        run: python main.py --scan

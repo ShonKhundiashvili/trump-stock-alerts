@@ -314,6 +314,25 @@ def run_cycle(conn, settings, detector, llm, alerter) -> None:
             logger.debug("Cycle summary send failed: %s", exc)
 
 
+def _make_alerter(settings) -> TelegramAlerter:
+    return TelegramAlerter(settings.telegram_bot_token, settings.telegram_chat_id,
+                           enable_feedback=settings.enable_feedback,
+                           channel_chats=settings.channel_chats,
+                           channel_threads=config_loader.load_topics())
+
+
+def run_weekly_scan(settings) -> None:
+    """Run the weekly equity scanner and post results to the Weekly Scan topic."""
+    import scanner
+    config_loader.setup_logging(settings.log_level)
+    logger.info("Starting weekly equity scan…")
+    try:
+        result = scanner.run_scan(settings, _make_alerter(settings))
+        logger.info("Weekly scan finished: %s", result)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Weekly scan failed: %s", exc)
+
+
 def build_detector(settings) -> Detector:
     watchlist = config_loader.load_watchlist()
     phrases = config_loader.load_phrases()
@@ -360,6 +379,7 @@ def main(run_once: bool = False) -> None:
                 feedback_bot.FeedbackBot(
                     settings.telegram_bot_token, settings.telegram_chat_id, conn,
                     extra_chat_ids=list(settings.channel_chats.values()),
+                    settings=settings,
                 ).drain()
             except Exception as exc:  # noqa: BLE001
                 logger.exception("Feedback drain error (continuing): %s", exc)
@@ -403,4 +423,7 @@ def main(run_once: bool = False) -> None:
 
 if __name__ == "__main__":
     import sys
-    main(run_once="--once" in sys.argv)
+    if "--scan" in sys.argv:
+        run_weekly_scan(config_loader.load_settings())
+    else:
+        main(run_once="--once" in sys.argv)
