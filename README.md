@@ -259,6 +259,20 @@ same inputs always yield the same score.
 `muted_companies`, `training_examples`, plus `alert_score` /
 `alert_suppressed_reason` on `detections`. Nothing is auto-deleted.
 
+**Turning training examples into tests (explicit, never automatic).** When you
+tap 🧪 on alerts, run this when *you* choose to lock that behaviour into the
+test suite:
+
+```bash
+python scripts/generate_tests_from_training.py
+pytest tests/test_training_examples.py
+```
+
+It writes `tests/test_training_examples.py` from your saved examples: a detection
+ever labelled ❌ becomes a *negative* test (ticker must NOT be detected); others
+become *positive* tests (ticker must be detected). It only writes the test file —
+it never edits detector code or config.
+
 **Architecture:** the feedback receiver long-polls `getUpdates` in a background
 thread alongside source polling. On the scheduled (`--once`) runner it instead
 *drains* pending taps at the start of each run (the update offset is persisted in
