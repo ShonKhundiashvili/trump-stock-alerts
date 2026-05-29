@@ -53,6 +53,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MIN_ALERT_CONFIDENCE: MEDIUM
+          ENABLE_TELEGRAM_FEEDBACK: "true"
           DATABASE_PATH: alerts.db
           LOG_LEVEL: INFO
         run: python main.py --once

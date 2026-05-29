@@ -74,13 +74,60 @@ CREATE TABLE IF NOT EXISTS source_state (
     last_polled   TEXT,
     extra         TEXT
 );
+
+CREATE TABLE IF NOT EXISTS feedback (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    detection_id         INTEGER,
+    source_item_id       TEXT,
+    ticker               TEXT,
+    company_name         TEXT,
+    source               TEXT,
+    source_priority      TEXT,
+    original_confidence  TEXT,
+    feedback_label       TEXT,
+    telegram_message_id  TEXT,
+    telegram_chat_id     TEXT,
+    user_id              TEXT,
+    username             TEXT,
+    comment              TEXT,
+    created_at           TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS muted_sources (
+    source      TEXT PRIMARY KEY,
+    reason      TEXT,
+    created_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS muted_companies (
+    ticker        TEXT PRIMARY KEY,
+    company_name  TEXT,
+    reason        TEXT,
+    created_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS training_examples (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    detection_id        INTEGER,
+    text                TEXT,
+    source              TEXT,
+    url                 TEXT,
+    ticker              TEXT,
+    company_name        TEXT,
+    model_features_json TEXT,
+    user_label          TEXT,
+    created_at          TEXT NOT NULL
+);
 """
 
 
 def connect(database_path: str) -> sqlite3.Connection:
-    conn = sqlite3.connect(database_path)
+    # check_same_thread=False so the feedback-bot thread can share the DB file
+    # safely; WAL mode + short autocommitted writes keep concurrent access sane.
+    conn = sqlite3.connect(database_path, check_same_thread=False, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA busy_timeout=5000;")
     conn.execute("PRAGMA foreign_keys=ON;")
     return conn
 
@@ -99,8 +146,14 @@ def _migrate(conn: sqlite3.Connection) -> None:
             "text_confidence": "TEXT",
             "source_priority": "TEXT",
             "verification_status": "TEXT",
+            "alert_score": "INTEGER",
+            "alert_suppressed_reason": "TEXT",
         },
-        "alert_log": {"text_hash": "TEXT"},
+        "alert_log": {
+            "text_hash": "TEXT",
+            "telegram_message_id": "TEXT",
+            "telegram_chat_id": "TEXT",
+        },
     }
     for table, cols in wanted.items():
         existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
@@ -199,6 +252,23 @@ def update_detection_verdict(
     conn.commit()
 
 
+def set_alert_score(conn: sqlite3.Connection, detection_id: int, score: int) -> None:
+    conn.execute("UPDATE detections SET alert_score = ? WHERE id = ?", (score, detection_id))
+    conn.commit()
+
+
+def set_alert_suppressed(conn: sqlite3.Connection, detection_id: int, reason: str) -> None:
+    conn.execute(
+        "UPDATE detections SET alert_suppressed_reason = ? WHERE id = ?",
+        (reason, detection_id),
+    )
+    conn.commit()
+
+
+def get_detection(conn: sqlite3.Connection, detection_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute("SELECT * FROM detections WHERE id = ?", (detection_id,)).fetchone()
+
+
 def corroboration(
     conn: sqlite3.Connection, ticker: str, window_hours: int = 48
 ) -> tuple[bool, int]:
@@ -277,6 +347,19 @@ def record_alert(
     return cur.rowcount > 0
 
 
+def update_alert_message(
+    conn: sqlite3.Connection,
+    detection_id: int,
+    message_id: Optional[str],
+    chat_id: Optional[str],
+) -> None:
+    conn.execute(
+        "UPDATE alert_log SET telegram_message_id = ?, telegram_chat_id = ? WHERE detection_id = ?",
+        (message_id, chat_id, detection_id),
+    )
+    conn.commit()
+
+
 # --------------------------------------------------------------------------- #
 # source_state
 # --------------------------------------------------------------------------- #
@@ -314,4 +397,126 @@ def set_source_state(
 def recent_detections(conn: sqlite3.Connection, limit: int = 20) -> List[sqlite3.Row]:
     return conn.execute(
         "SELECT * FROM detections ORDER BY id DESC LIMIT ?", (limit,)
+    ).fetchall()
+
+
+# --------------------------------------------------------------------------- #
+# feedback (human-in-the-loop)
+# --------------------------------------------------------------------------- #
+def insert_feedback(conn: sqlite3.Connection, **fields) -> int:
+    cols = [
+        "detection_id", "source_item_id", "ticker", "company_name", "source",
+        "source_priority", "original_confidence", "feedback_label",
+        "telegram_message_id", "telegram_chat_id", "user_id", "username", "comment",
+    ]
+    values = [fields.get(c) for c in cols]
+    cur = conn.execute(
+        f"INSERT INTO feedback ({', '.join(cols)}, created_at) "
+        f"VALUES ({', '.join('?' for _ in cols)}, ?)",
+        (*values, now_iso()),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def insert_training_example(conn: sqlite3.Connection, **fields) -> int:
+    cols = ["detection_id", "text", "source", "url", "ticker", "company_name",
+            "model_features_json", "user_label"]
+    values = [fields.get(c) for c in cols]
+    cur = conn.execute(
+        f"INSERT INTO training_examples ({', '.join(cols)}, created_at) "
+        f"VALUES ({', '.join('?' for _ in cols)}, ?)",
+        (*values, now_iso()),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+# --- muting --------------------------------------------------------------- #
+def mute_source(conn: sqlite3.Connection, source: str, reason: str = "") -> None:
+    conn.execute(
+        "INSERT OR REPLACE INTO muted_sources (source, reason, created_at) VALUES (?, ?, ?)",
+        (source, reason, now_iso()),
+    )
+    conn.commit()
+
+
+def unmute_source(conn: sqlite3.Connection, source: str) -> bool:
+    cur = conn.execute("DELETE FROM muted_sources WHERE source = ?", (source,))
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def is_source_muted(conn: sqlite3.Connection, source: str) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM muted_sources WHERE source = ?", (source,)
+    ).fetchone() is not None
+
+
+def list_muted_sources(conn: sqlite3.Connection) -> List[sqlite3.Row]:
+    return conn.execute("SELECT * FROM muted_sources ORDER BY source").fetchall()
+
+
+def mute_company(conn: sqlite3.Connection, ticker: str, company_name: str = "",
+                 reason: str = "") -> None:
+    conn.execute(
+        "INSERT OR REPLACE INTO muted_companies (ticker, company_name, reason, created_at) "
+        "VALUES (?, ?, ?, ?)",
+        (ticker, company_name, reason, now_iso()),
+    )
+    conn.commit()
+
+
+def unmute_company(conn: sqlite3.Connection, ticker: str) -> bool:
+    cur = conn.execute("DELETE FROM muted_companies WHERE ticker = ?", (ticker,))
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def is_company_muted(conn: sqlite3.Connection, ticker: Optional[str]) -> bool:
+    if not ticker:
+        return False
+    return conn.execute(
+        "SELECT 1 FROM muted_companies WHERE ticker = ?", (ticker,)
+    ).fetchone() is not None
+
+
+def list_muted_companies(conn: sqlite3.Connection) -> List[sqlite3.Row]:
+    return conn.execute("SELECT * FROM muted_companies ORDER BY ticker").fetchall()
+
+
+# --- feedback aggregates (used by feedback_learning + /stats) ------------- #
+def feedback_label_counts(conn: sqlite3.Connection, column: str, value: str) -> dict:
+    """Counts of each feedback_label for a given source/ticker/matched_phrase."""
+    if column not in ("source", "ticker"):
+        raise ValueError("column must be 'source' or 'ticker'")
+    rows = conn.execute(
+        f"SELECT feedback_label, COUNT(*) c FROM feedback WHERE {column} = ? GROUP BY feedback_label",
+        (value,),
+    ).fetchall()
+    return {r["feedback_label"]: r["c"] for r in rows}
+
+
+def phrase_label_counts(conn: sqlite3.Connection, phrase: str) -> dict:
+    rows = conn.execute(
+        """
+        SELECT f.feedback_label, COUNT(*) c
+        FROM feedback f JOIN detections d ON d.id = f.detection_id
+        WHERE d.matched_phrase = ? GROUP BY f.feedback_label
+        """,
+        (phrase,),
+    ).fetchall()
+    return {r["feedback_label"]: r["c"] for r in rows}
+
+
+def overall_feedback_counts(conn: sqlite3.Connection) -> dict:
+    rows = conn.execute(
+        "SELECT feedback_label, COUNT(*) c FROM feedback GROUP BY feedback_label"
+    ).fetchall()
+    return {r["feedback_label"]: r["c"] for r in rows}
+
+
+def feedback_for_detection(conn: sqlite3.Connection, detection_id: int) -> List[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM feedback WHERE detection_id = ? ORDER BY id", (detection_id,)
     ).fetchall()

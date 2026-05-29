@@ -40,6 +40,7 @@ class Settings:
     database_path: str
     log_level: str
     min_alert_confidence: str  # HIGH | MEDIUM | LOW — minimum to send a Telegram alert
+    enable_feedback: bool      # ENABLE_TELEGRAM_FEEDBACK — inline buttons + commands
 
     @property
     def telegram_enabled(self) -> bool:
@@ -74,6 +75,8 @@ def load_settings(dotenv_path: Optional[str] = None) -> Settings:
         database_path=os.getenv("DATABASE_PATH", "alerts.db"),
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
         min_alert_confidence=(os.getenv("MIN_ALERT_CONFIDENCE", "MEDIUM") or "MEDIUM").upper(),
+        enable_feedback=(os.getenv("ENABLE_TELEGRAM_FEEDBACK", "true") or "true").lower()
+        not in ("0", "false", "no", "off", ""),
     )
 
 
@@ -99,6 +102,20 @@ def load_watchlist(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:
 
 def load_phrases(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:
     return _load_json(config_dir / "phrases.json", {"HIGH": [], "MEDIUM": []})
+
+
+def load_alerting(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:
+    return _load_json(
+        config_dir / "alerting.json",
+        {
+            "min_alert_score": 60,
+            "send_low_confidence": False,
+            "send_social_rumor": True,
+            "social_rumor_min_score": 70,
+            "respect_muted_sources": True,
+            "respect_muted_companies": True,
+        },
+    )
 
 
 def load_priority_tickers(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:

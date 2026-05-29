@@ -1,0 +1,9 @@
+{
+  "_comment": "Alert gating. alert_score is 0-100 (see feedback_learning.py). Only alerts that pass the muted checks and the score threshold are sent; suppressed ones are still stored with a reason.",
+  "min_alert_score": 60,
+  "send_low_confidence": false,
+  "send_social_rumor": true,
+  "social_rumor_min_score": 70,
+  "respect_muted_sources": true,
+  "respect_muted_companies": true
+}

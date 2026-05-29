@@ -18,12 +18,15 @@ from __future__ import annotations
 
 import logging
 import signal
+import threading
 import time
 from typing import List
 
 import alert_policy
 import config_loader
 import db
+import feedback_bot
+import feedback_learning
 from detector import Detector
 from llm_classifier import LLMClassifier
 from models import Confidence, DetectionResult, SourceItem, SourcePriority
@@ -105,7 +108,7 @@ def process_item(
     detector: Detector,
     llm: LLMClassifier,
     alerter: TelegramAlerter,
-    min_alert_rank: int = 2,
+    alerting: dict,
     require_keywords: list | None = None,
 ) -> None:
     # Stamp dedup keys before storage.
@@ -130,8 +133,6 @@ def process_item(
     for det in detections:
         # Stamp provenance BEFORE storing so corroboration sees the correct tier.
         det.source_priority = item.priority
-        # Record the raw (text-confidence) detection first so corroboration can
-        # see it across sources, then apply the provenance/verification policy.
         detection_id = db.insert_detection(conn, item, det, rowid)
         if det.confidence == Confidence.NONE:
             continue
@@ -143,11 +144,14 @@ def process_item(
         db.update_detection_verdict(conn, detection_id, det.confidence.value,
                                     det.verification_status)
 
-        # Everything is stored; only alert at/above the configured threshold
-        # (with the SOCIAL_RUMOR early-warning exception in should_alert).
-        if not should_alert(det, min_alert_rank):
-            logger.debug("Below alert threshold (%s, %s) for %s / %s; stored only.",
-                         det.confidence.value, item.priority, item.source, det.ticker)
+        # Score + gate (mutes, thresholds, learned adjustments). Everything is
+        # stored; suppressed alerts keep a reason for transparency.
+        decision = feedback_learning.evaluate_alert(conn, det, item, alerting)
+        db.set_alert_score(conn, detection_id, decision.score)
+        if not decision.send:
+            db.set_alert_suppressed(conn, detection_id, decision.reason)
+            logger.debug("Suppressed (%s, score=%s) %s / %s",
+                         decision.reason, decision.score, item.source, det.ticker)
             continue
 
         # Dedup: same source-item+ticker, OR same statement text reposted elsewhere.
@@ -161,27 +165,26 @@ def process_item(
                                detection_id, text_hash=item.text_hash):
             continue
 
-        sent = alerter.send(item, det)
+        sent, message_id, chat_id = alerter.send(item, det, detection_id=detection_id)
         if sent:
             db.mark_alert_sent(conn, detection_id)
+            db.update_alert_message(conn, detection_id, message_id, chat_id)
             logger.info(
-                "ALERT [%s|%s] %s (%s) conf=%s verify=%r via=%s",
+                "ALERT [%s|%s] %s (%s) conf=%s score=%s verify=%r",
                 item.source, item.priority, det.company_name, det.ticker,
-                det.confidence.value, det.verification_status, det.detected_via,
+                det.confidence.value, decision.score, det.verification_status,
             )
 
 
 def run_cycle(conn, settings, detector, llm, alerter) -> None:
-    min_rank = Confidence(settings.min_alert_confidence).rank() \
-        if settings.min_alert_confidence in Confidence.__members__ else Confidence.MEDIUM.rank()
+    alerting = config_loader.load_alerting()
     sources_config = config_loader.load_sources()
     sources = build_sources(sources_config, conn, settings)
     for source in sources:
         items = source.safe_fetch()
         for item in items:
             try:
-                process_item(conn, item, detector, llm, alerter,
-                             min_alert_rank=min_rank,
+                process_item(conn, item, detector, llm, alerter, alerting,
                              require_keywords=source.require_keywords)
             except Exception as exc:  # noqa: BLE001 - never crash the loop on one item
                 logger.exception("Error processing item %s: %s", item.fingerprint(), exc)
@@ -219,10 +222,20 @@ def main(run_once: bool = False) -> None:
         openai_api_key=settings.openai_api_key,
         anthropic_api_key=settings.anthropic_api_key,
     )
-    alerter = TelegramAlerter(settings.telegram_bot_token, settings.telegram_chat_id)
+    alerter = TelegramAlerter(settings.telegram_bot_token, settings.telegram_chat_id,
+                              enable_feedback=settings.enable_feedback)
 
     if run_once:
         # One poll cycle then exit — used by scheduled runners (GitHub Actions/cron).
+        # Drain any feedback taps made since the last run first (offset persists
+        # in the DB), then run one source cycle.
+        if settings.enable_feedback and settings.telegram_enabled:
+            try:
+                feedback_bot.FeedbackBot(
+                    settings.telegram_bot_token, settings.telegram_chat_id, conn
+                ).drain()
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("Feedback drain error (continuing): %s", exc)
         try:
             run_cycle(conn, settings, detector, llm, alerter)
         except Exception as exc:  # noqa: BLE001
@@ -233,6 +246,15 @@ def main(run_once: bool = False) -> None:
 
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
+
+    # Start the Telegram feedback receiver in its own thread (own DB connection).
+    stop_event = threading.Event()
+    feedback_thread = None
+    if settings.enable_feedback and settings.telegram_enabled:
+        feedback_thread = feedback_bot.start_in_thread(settings, stop_event)
+        logger.info("Telegram feedback enabled (inline buttons + commands).")
+    elif settings.enable_feedback:
+        logger.warning("Feedback enabled but Telegram not configured; receiver not started.")
 
     while _running:
         try:
@@ -245,6 +267,9 @@ def main(run_once: bool = False) -> None:
                 break
             time.sleep(1)
 
+    stop_event.set()
+    if feedback_thread:
+        feedback_thread.join(timeout=5)
     conn.close()
     logger.info("Stopped.")
 

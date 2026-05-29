@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import html
 import logging
-from typing import Optional
+from typing import List, Optional, Tuple
 
 import requests
 
@@ -21,12 +21,32 @@ logger = logging.getLogger(__name__)
 DISCLAIMER = "Not financial advice. Verify the source before acting."
 TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
 
+# (emoji label, callback action) — callback_data is "feedback:<detection_id>:<action>".
+FEEDBACK_BUTTONS = [
+    [("✅ Useful / Real Signal", "useful"), ("❌ Fake / Wrong", "fake")],
+    [("⚠️ Real but Not Useful", "not_useful"), ("🧵 Needs More Context", "needs_context")],
+    [("🚫 Mute This Source", "mute_source"), ("🔕 Mute This Company", "mute_company")],
+    [("📈 Too Late", "too_late"), ("🧪 Mark as Training Example", "training")],
+]
+
+
+def build_feedback_keyboard(detection_id: int) -> dict:
+    """Inline keyboard with compact callback payloads (well under Telegram's 64 bytes)."""
+    rows = [
+        [{"text": label, "callback_data": f"feedback:{detection_id}:{action}"}
+         for (label, action) in row]
+        for row in FEEDBACK_BUTTONS
+    ]
+    return {"inline_keyboard": rows}
+
 
 class TelegramAlerter:
-    def __init__(self, bot_token: Optional[str], chat_id: Optional[str], timeout: int = 15) -> None:
+    def __init__(self, bot_token: Optional[str], chat_id: Optional[str],
+                 timeout: int = 15, enable_feedback: bool = True) -> None:
         self.bot_token = bot_token
         self.chat_id = chat_id
         self.timeout = timeout
+        self.enable_feedback = enable_feedback
 
     @property
     def enabled(self) -> bool:
@@ -77,26 +97,43 @@ class TelegramAlerter:
         lines += ["", f"<i>{DISCLAIMER}</i>"]
         return "\n".join(lines)
 
-    def send(self, item: SourceItem, detection: DetectionResult) -> bool:
+    def send(
+        self,
+        item: SourceItem,
+        detection: DetectionResult,
+        detection_id: Optional[int] = None,
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
+        """Send an alert. Returns (sent_ok, telegram_message_id, chat_id).
+
+        When feedback is enabled and a detection_id is given, inline feedback
+        buttons are attached so you can classify the alert from Telegram.
+        """
         message = self.format_message(item, detection)
+        payload = {
+            "chat_id": self.chat_id,
+            "text": message,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": False,
+        }
+        if self.enable_feedback and detection_id is not None:
+            payload["reply_markup"] = build_feedback_keyboard(detection_id)
+
         if not self.enabled:
             logger.info("Telegram disabled; would have sent:\n%s", message)
-            return False
+            return (False, None, None)
         try:
             resp = requests.post(
                 TELEGRAM_API.format(token=self.bot_token),
-                json={
-                    "chat_id": self.chat_id,
-                    "text": message,
-                    "parse_mode": "HTML",
-                    "disable_web_page_preview": False,
-                },
+                json=payload,
                 timeout=self.timeout,
             )
             if resp.status_code != 200:
                 logger.error("Telegram send failed (%s): %s", resp.status_code, resp.text)
-                return False
-            return True
+                return (False, None, None)
+            result = resp.json().get("result", {})
+            message_id = str(result.get("message_id")) if result.get("message_id") else None
+            chat_id = str(result.get("chat", {}).get("id")) if result.get("chat") else self.chat_id
+            return (True, message_id, chat_id)
         except requests.RequestException as exc:
             logger.error("Telegram send error: %s", exc)
-            return False
+            return (False, None, None)

@@ -207,6 +207,66 @@ it — columns: `ticker,company_name,exchange,country,asset_type`.
 
 ---
 
+## Human-in-the-loop feedback
+
+Every alert carries inline Telegram buttons so **you** classify it, and the bot
+learns your preferences over time — locally, rule-based, and transparent. It
+never trades, never gives advice, and never edits code or config on its own.
+
+**Buttons under each alert:**
+
+| Button | Meaning |
+|--------|---------|
+| ✅ Useful / Real Signal | Good alert — raises the score for this source/company/phrase |
+| ❌ Fake / Wrong | Wrong detection — strongly lowers the source score |
+| ⚠️ Real but Not Useful | Correct but not actionable — slightly lowers the score |
+| 🧵 Needs More Context | Ambiguous — slight negative unless a primary source confirms |
+| 🚫 Mute This Source | Stop alerting from this source (still stored, marked `muted_source`) |
+| 🔕 Mute This Company | Stop alerting for this ticker (still stored, marked `muted_company`) |
+| 📈 Too Late | Flags a latency problem; does **not** count against correctness |
+| 🧪 Mark as Training Example | Saves the full example to `training_examples` for later review |
+
+When you tap a button, Telegram sends a callback; the bot stores your label in
+SQLite, replies "Feedback saved: …", and never crashes on old/invalid taps.
+Only your configured `TELEGRAM_CHAT_ID` is honoured — other chats are ignored.
+
+**How learning affects future alerts.** Each alert gets an `alert_score` (0–100):
+
+```
+base: HIGH 85 | MEDIUM 60 | LOW 30
++10 primary source   |  -15 social rumor   |  +15 clear direct buy phrase
+-20 ambiguous ticker
++ user source quality (-20..+20)  + company relevance (-15..+15)
++ phrase quality (-10..+10)        # all derived from your feedback history
+```
+
+An alert is sent only if it passes the mutes **and** the score thresholds in
+`config/alerting.json` (`min_alert_score`, `send_low_confidence`,
+`send_social_rumor`, `social_rumor_min_score`). Suppressed alerts are still
+stored with a reason, so nothing is hidden. The scoring is deterministic — the
+same inputs always yield the same score.
+
+**Telegram commands** (from your chat only):
+
+- `/stats` — totals, useful/fake/not-useful counts, top/worst sources, top tickers, mutes
+- `/mutes` — list muted sources and companies
+- `/unmute_source <source>` — remove a source from the mute list
+- `/unmute_company <ticker>` — remove a ticker from the mute list
+- `/recent` — last 5 alerts and their feedback status
+- `/help` — command list
+
+**Where it's stored:** all local in SQLite — tables `feedback`, `muted_sources`,
+`muted_companies`, `training_examples`, plus `alert_score` /
+`alert_suppressed_reason` on `detections`. Nothing is auto-deleted.
+
+**Architecture:** the feedback receiver long-polls `getUpdates` in a background
+thread alongside source polling. On the scheduled (`--once`) runner it instead
+*drains* pending taps at the start of each run (the update offset is persisted in
+the DB), so feedback made between runs is picked up on the next run. Enable/disable
+with `ENABLE_TELEGRAM_FEEDBACK` in `.env`.
+
+---
+
 ## Run locally
 
 ```bash
