@@ -462,78 +462,39 @@ def _e(s) -> str:
 
 
 def _build_report(regime, top, watchlist, avoid, universe_n) -> List[str]:
-    msgs: List[str] = []
+    """Compact, trade-ready format: one pick per 2 lines, just the numbers."""
     vix = f"{regime['vix']:.1f}" if regime["vix"] else "n/a"
-    head = (
-        f"📊 <b>Weekly Equity Scan</b>\n"
-        f"<b>Market regime: {regime['regime']}</b>\n"
-        f"SPY: {regime['spy_trend']} · QQQ: {regime['qqq_trend']} · VIX: {vix} · "
-        f"breadth (above 50DMA): {regime['breadth']*100:.0f}% of {universe_n}\n"
-        f"Picks this week: {len(top)}"
-    )
+    lines = [
+        f"📊 <b>Weekly Scan — {regime['regime']}</b> · {len(top)} picks · "
+        f"VIX {vix} · breadth {regime['breadth']*100:.0f}%",
+    ]
     if not top:
-        head += "\nNo clean setups met the bar this week — staying flat is a position."
-    head += f"\n\n<i>{DISCLAIMER}</i>"
-    msgs.append(head)
-
-    if top:
-        rows = ["<b>Ranked candidates</b>  (score · setup · price→target · RR)"]
-        for i, p in enumerate(top, 1):
-            t = p.tech
-            rows.append(
-                f"{i}. <b>{_e(t.ticker)}</b> {p.total:.0f} · {t.setup} · "
-                f"${t.price:g}→${t.target:g} (+5%) · RR {t.rr_ratio:g}"
-            )
-        msgs.append("\n".join(rows))
-
+        lines.append("No clean setups met the bar this week — staying flat is a position.")
     for i, p in enumerate(top, 1):
-        msgs.append(_pick_detail(i, p))
-
-    if len(top) >= 3:
-        best = ", ".join(f"{p.tech.ticker}({p.total:.0f})" for p in top[:3])
-        msgs.append(f"⭐ <b>Best 3 setups:</b> {best}")
-
+        t = p.tech
+        er = f"ER ~{p.dte}d" if p.dte is not None else "ER n/a"
+        lines.append(
+            f"\n{i}. <b>{_e(t.ticker)}</b> · {t.setup} · score {p.total:.0f}\n"
+            f"   entry ${t.price:g} → tgt ${t.target:g} (+5%) · stop ${t.stop:g} · RR {t.rr_ratio:g}\n"
+            f"   sup ${t.support:g} · res ${t.resistance:g} · RSI {t.rsi:g} · "
+            f"ATR {t.atr_pct:g}% · {er}"
+        )
     if watchlist:
-        wl = "\n".join(f"• {_e(p.tech.ticker)} ({p.total:.0f}) — {p.tech.setup}, "
-                       f"RR {p.tech.rr_ratio:g} (not ready)" for p in watchlist)
-        msgs.append(f"👀 <b>Watchlist — not ready yet</b>\n{wl}")
-
+        lines.append("\n👀 Watchlist: " +
+                     ", ".join(f"{_e(p.tech.ticker)}({p.total:.0f})" for p in watchlist))
     if avoid:
-        msgs.append("🚫 <b>Avoid / failed risk checks</b>\n" +
-                    "\n".join(f"• {_e(a)}" for a in avoid[:8]))
+        lines.append("🚫 Avoid: " + "; ".join(_e(a) for a in avoid[:6]))
+    lines.append(f"\n<i>{DISCLAIMER}</i>")
 
-    msgs.append(
-        "🛡️ <b>Risk management</b>\n"
-        "• Size so a stop-out is a small, fixed % of capital.\n"
-        "• Targets are ~5% scenarios over 1–2 weeks, not predictions.\n"
-        "• Exit if the invalidation level (below stop / 50DMA) breaks.\n"
-        "• In RISK-OFF/NEUTRAL weeks, fewer or no setups is the correct output.\n"
-        f"<i>{DISCLAIMER}</i>"
-    )
-    return msgs
-
-
-def _pick_detail(i: int, p: Pick) -> str:
-    t = p.tech
-    up_pct = (t.target / t.price - 1) * 100
-    name = p.company or t.ticker
-    trend = "above" if t.above_200 else "below"
-    fnotes = "; ".join(p.fnotes) if p.fnotes else "n/a"
-    cnotes = "; ".join(p.cnotes) if p.cnotes else "no notable catalyst"
-    return (
-        f"<b>#{i} {_e(t.ticker)} — {_e(name)}</b>\n"
-        f"Sector: {_e(p.sector or 'n/a')} · Conviction: {p.total:.0f}/100 · Setup: {t.setup}\n"
-        f"Price ${t.price:g} → target ${t.target:g} (+{up_pct:.1f}%) · "
-        f"stop ${t.stop:g} · RR {t.rr_ratio:g}\n"
-        f"Support ${t.support:g} · Resistance ${t.resistance:g} · "
-        f"RSI {t.rsi:g} · ATR {t.atr_pct:g}%\n"
-        f"<b>Technical:</b> {t.setup}; price {trend} 200DMA, "
-        f"{'above' if t.above_50 else 'below'} 50DMA; RSI {t.rsi:g}; "
-        f"~5% target is within range given {t.atr_pct:g}% ATR.\n"
-        f"<b>Fundamental:</b> {_e(fnotes)} (score {p.fund:.0f}/15).\n"
-        f"<b>Catalyst/news:</b> {_e(cnotes)} (score {p.catalyst:.0f}/20).\n"
-        f"<b>Main risks:</b> market regime, volatility ({t.atr_pct:g}% ATR), "
-        f"setup failure, headline risk.\n"
-        f"<b>Why top:</b> high combined score with a clean {t.setup} and RR {t.rr_ratio:g}.\n"
-        f"<b>Invalidation:</b> daily close below ${t.stop:g} (stop) or loss of 50DMA."
-    )
+    # One message, split only if it would exceed Telegram's limit.
+    text = "\n".join(lines)
+    if len(text) <= 3800:
+        return [text]
+    out, buf = [], ""
+    for ln in lines:
+        if len(buf) + len(ln) + 1 > 3800:
+            out.append(buf); buf = ""
+        buf += ln + "\n"
+    if buf:
+        out.append(buf)
+    return out
