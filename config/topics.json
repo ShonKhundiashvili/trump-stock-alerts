@@ -3,5 +3,7 @@
   "trump": 2,
   "predictions": 4,
   "markets": 6,
-  "contracts": 8
+  "contracts": 8,
+  "ratings": 10,
+  "institutions": 12
 }

@@ -61,6 +61,7 @@ class SourceItem:
     priority: str = "PRIMARY"   # SourcePriority value, stamped by the adapter
     channel: str = "default"    # routing bucket (e.g. trump / markets / contracts)
     relay: bool = False         # forward as-is (prediction markets) vs run detector
+    ticker: Optional[str] = None  # optional ticker hint set by structured sources
     canonical_url: Optional[str] = None
     text_hash: Optional[str] = None
 

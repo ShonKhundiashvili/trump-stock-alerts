@@ -39,6 +39,7 @@ class Settings:
     youtube_api_key: Optional[str]
     newsapi_key: Optional[str]
     kalshi_api_key: Optional[str]
+    fmp_api_key: Optional[str]
     poll_seconds: int
     database_path: str
     log_level: str
@@ -78,6 +79,7 @@ def load_settings(dotenv_path: Optional[str] = None) -> Settings:
         youtube_api_key=os.getenv("YOUTUBE_API_KEY") or None,
         newsapi_key=os.getenv("NEWSAPI_KEY") or None,
         kalshi_api_key=os.getenv("KALSHI_API_KEY") or None,
+        fmp_api_key=os.getenv("FMP_API_KEY") or None,
         poll_seconds=_int("POLL_SECONDS", 60),
         database_path=os.getenv("DATABASE_PATH", "alerts.db"),
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
@@ -158,6 +160,7 @@ def load_alerting(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:
             "min_independent_sources": 2,
             "ticker_cooldown_hours": 6,
             "relay_max_age_hours": 0,
+            "cycle_summary": True,
         },
     )
 

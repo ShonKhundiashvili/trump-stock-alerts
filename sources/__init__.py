@@ -23,7 +23,9 @@ from .kalshi_source import KalshiSource
 from .news_search_source import NewsSearchSource
 from .newsapi_source import NewsAPISource
 from .polymarket_source import PolymarketSource
+from .ratings_source import RatingsSource
 from .rss_source import RSSSource
+from .sec_stakes_source import SECStakesSource
 from .truthsocial_source import TruthSocialSource
 from .usaspending_source import USASpendingSource
 from .webpage_source import WebpageSource
@@ -195,6 +197,25 @@ def build_sources(
         src.relay = True
         sources.append(_finalize(src, priority_cfg,
                                  explicit_priority=ks_cfg.get("priority", "PRIMARY"),
+                                 require_keywords=[]))
+
+    # --- Analyst ratings (FMP, needs key) — relay to ratings ----------- #
+    rt_cfg = sources_config.get("ratings", {})
+    if rt_cfg.get("enabled") and settings.fmp_api_key:
+        src = RatingsSource(conn=conn, api_key=settings.fmp_api_key,
+                            pages=rt_cfg.get("pages", 1))
+        src.relay = True
+        sources.append(_finalize(src, priority_cfg,
+                                 explicit_priority=rt_cfg.get("priority", "PRIMARY"),
+                                 require_keywords=[]))
+
+    # --- SEC 13D/13G stake filings — relay to institutions ------------- #
+    sec_cfg = sources_config.get("sec_stakes", {})
+    if sec_cfg.get("enabled"):
+        src = SECStakesSource(conn=conn, max_emit=sec_cfg.get("max_emit", 12))
+        src.relay = True
+        sources.append(_finalize(src, priority_cfg,
+                                 explicit_priority=sec_cfg.get("priority", "PRIMARY"),
                                  require_keywords=[]))
 
     # --- Generic public webpages / transcripts (PRIMARY) --------------- #

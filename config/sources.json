@@ -103,8 +103,25 @@
 
   "polymarket": {
     "enabled": true,
-    "_note": "Public Polymarket API. Stock/crypto/M&A prediction markets only (filtered); forwarded to the 'predictions' channel. Keyless. Enable only once you have a separate predictions room (set TELEGRAM_CHAT_PREDICTIONS) so it doesn't mix into your main chat.",
-    "max_markets": 100,
+    "_note": "Public Polymarket API. Stock/crypto/M&A markets only, with probability >= min_probability and volume >= min_volume. Forwarded to the 'predictions' topic.",
+    "max_markets": 200,
+    "max_emit": 15,
+    "min_volume": 50000,
+    "min_probability": 0.50,
+    "priority": "PRIMARY"
+  },
+
+  "ratings": {
+    "enabled": true,
+    "_note": "Analyst upgrades/downgrades & price targets via Financial Modeling Prep. Needs FMP_API_KEY (free); skipped automatically when no key. Forwarded to the 'ratings' topic.",
+    "pages": 1,
+    "priority": "PRIMARY"
+  },
+
+  "sec_stakes": {
+    "enabled": true,
+    "_note": "SEC EDGAR 13D/13G stake filings (>5% ownership, filed within days). Free, keyless. Forwarded to the 'institutions' topic.",
+    "max_emit": 12,
     "priority": "PRIMARY"
   },
 

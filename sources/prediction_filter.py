@@ -64,16 +64,37 @@ def is_market_relevant(question: str) -> bool:
     return has_subject and has_event
 
 
-def yes_probability(prices) -> str:
-    """Format the 'Yes' probability from outcome prices (0-1 floats) as 'NN%'."""
+def _as_list(x):
+    if isinstance(x, str):
+        import json
+        try:
+            return json.loads(x)
+        except ValueError:
+            return []
+    return x or []
+
+
+def lead_probability(outcomes, prices) -> float:
+    """Probability (0-1) of the headline outcome.
+
+    For a Yes/No market it's the 'Yes' price (the chance the event happens);
+    for a multi-outcome market it's the leading outcome's price. Returns 0 on
+    parse failure.
+    """
+    outs = [str(o).lower() for o in _as_list(outcomes)]
+    prc = _as_list(prices)
     try:
-        if isinstance(prices, str):
-            import json
-            prices = json.loads(prices)
-        p = float(prices[0])
-        return f"{round(p * 100)}%"
-    except (ValueError, TypeError, IndexError, KeyError):
-        return "?"
+        if "yes" in outs:
+            return float(prc[outs.index("yes")])
+        return max(float(p) for p in prc) if prc else 0.0
+    except (ValueError, TypeError, IndexError):
+        return 0.0
+
+
+def yes_probability(prices, outcomes=None) -> str:
+    """Format the headline probability as 'NN%'."""
+    p = lead_probability(outcomes, prices)
+    return f"{round(p * 100)}%" if p else "?"
 
 
 _WS = re.compile(r"\s+")

@@ -15,6 +15,9 @@
     "polymarket:": "predictions",
     "kalshi:": "predictions",
 
+    "ratings:": "ratings",
+    "sec:": "institutions",
+
     "reddit:": "social",
 
     "gdelt:": "markets",

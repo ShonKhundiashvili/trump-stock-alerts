@@ -102,7 +102,7 @@ def should_alert(det: DetectionResult, min_alert_rank: int) -> bool:
     return False
 
 
-def process_relay(conn, item, detector, alerter, alerting, rowid) -> None:
+def process_relay(conn, item, detector, alerter, alerting, rowid, stats=None) -> None:
     """Forward a pre-filtered prediction-market item to its channel as news.
 
     Relay items (Polymarket/Kalshi) are already filtered to stock/crypto/M&A at
@@ -116,15 +116,27 @@ def process_relay(conn, item, detector, alerter, alerting, rowid) -> None:
     if max_age and age is not None and age > max_age:
         return  # too old (e.g. months-old standing market)
 
-    # Opportunistically resolve a ticker/company for display + routing context.
+    # Resolve a ticker/company for display: (1) source-provided hint,
+    # (2) detector on the text, (3) resolver on the title (clean company name).
     ticker = company = in_index = None
-    try:
-        dets = detector.detect(item.text)
-    except Exception:  # noqa: BLE001
-        dets = []
-    if dets:
-        best = max(dets, key=lambda d: d.confidence.rank())
-        ticker, company, in_index = best.ticker, best.company_name, best.in_index
+    if item.ticker:
+        ticker = item.ticker
+        cm = detector.resolver.resolve_ticker_token(item.ticker)
+        if cm:
+            company, in_index = cm.company_name, detector._index_label(item.ticker)
+    if not ticker:
+        try:
+            dets = detector.detect(item.text)
+        except Exception:  # noqa: BLE001
+            dets = []
+        if dets:
+            best = max(dets, key=lambda d: d.confidence.rank())
+            ticker, company, in_index = best.ticker, best.company_name, best.in_index
+    if not ticker and item.title:
+        cm = detector.resolver.resolve(item.title)
+        if cm and cm.ticker and cm.resolution_confidence >= 90 and not cm.ambiguous:
+            ticker, company = cm.ticker, cm.company_name
+            in_index = detector._index_label(cm.ticker)
 
     det = DetectionResult(
         company_name=company or (item.title or item.text)[:80],
@@ -161,6 +173,8 @@ def process_relay(conn, item, detector, alerter, alerting, rowid) -> None:
     if sent:
         db.mark_alert_sent(conn, detection_id)
         db.update_alert_message(conn, detection_id, message_id, chat_id)
+        if stats is not None:
+            stats[item.channel] = stats.get(item.channel, 0) + 1
         logger.info("RELAY [%s|%s] %s", item.source, item.channel, (item.title or "")[:80])
 
 
@@ -172,6 +186,7 @@ def process_item(
     alerter: TelegramAlerter,
     alerting: dict,
     require_keywords: list | None = None,
+    stats: dict | None = None,
 ) -> None:
     # Stamp dedup keys before storage.
     item.canonical_url = alert_policy.canonicalize_url(item.url)
@@ -181,9 +196,9 @@ def process_item(
     if rowid is None:
         return  # already seen
 
-    # Relay sources (prediction markets) are pre-filtered and forwarded as-is.
+    # Relay sources (prediction markets, ratings, SEC) are forwarded as-is.
     if item.relay:
-        process_relay(conn, item, detector, alerter, alerting, rowid)
+        process_relay(conn, item, detector, alerter, alerting, rowid, stats)
         return
 
     # Non-primary sources only get classified if they actually mention Trump.
@@ -238,6 +253,8 @@ def process_item(
         if sent:
             db.mark_alert_sent(conn, detection_id)
             db.update_alert_message(conn, detection_id, message_id, chat_id)
+            if stats is not None:
+                stats[item.channel] = stats.get(item.channel, 0) + 1
             logger.info(
                 "ALERT [%s|%s] %s (%s) conf=%s score=%s verify=%r",
                 item.source, item.priority, det.company_name, det.ticker,
@@ -249,14 +266,29 @@ def run_cycle(conn, settings, detector, llm, alerter) -> None:
     alerting = config_loader.load_alerting()
     sources_config = config_loader.load_sources()
     sources = build_sources(sources_config, conn, settings)
+    stats: dict = {}
+    n_sources = n_errors = 0
     for source in sources:
-        items = source.safe_fetch()
+        n_sources += 1
+        items = source.safe_fetch()   # failures are isolated per source
         for item in items:
             try:
                 process_item(conn, item, detector, llm, alerter, alerting,
-                             require_keywords=source.require_keywords)
+                             require_keywords=source.require_keywords, stats=stats)
             except Exception as exc:  # noqa: BLE001 - never crash the loop on one item
+                n_errors += 1
                 logger.exception("Error processing item %s: %s", item.fingerprint(), exc)
+
+    total = sum(stats.values())
+    logger.info("Cycle done: %d sources, %d alerts %s, %d item errors",
+                n_sources, total, dict(stats), n_errors)
+    # End-of-scan summary to the General topic (only when something fired).
+    if total and alerting.get("cycle_summary", True):
+        try:
+            parts = ", ".join(f"{ch}: {n}" for ch, n in sorted(stats.items()))
+            alerter.send_notice(f"✅ Scan complete — {total} new alert(s) → {parts}")
+        except Exception as exc:  # noqa: BLE001 - summary must never crash the cycle
+            logger.debug("Cycle summary send failed: %s", exc)
 
 
 def build_detector(settings) -> Detector:

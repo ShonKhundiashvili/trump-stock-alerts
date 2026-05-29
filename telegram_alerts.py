@@ -114,6 +114,25 @@ class TelegramAlerter:
         return bool(channel and (channel in self.channel_chats
                                  or channel in self.channel_threads))
 
+    def send_notice(self, text: str, channel: Optional[str] = None) -> bool:
+        """Send a plain status message (e.g. the end-of-scan summary). Goes to the
+        channel's topic if given, else the group's General thread."""
+        if not self.enabled:
+            logger.info("Telegram disabled; notice: %s", text)
+            return False
+        payload = {"chat_id": self.chat_for(channel), "text": text,
+                   "parse_mode": "HTML", "disable_web_page_preview": True}
+        thread = self.channel_threads.get(channel) if channel else None
+        if thread:
+            payload["message_thread_id"] = thread
+        try:
+            r = requests.post(TELEGRAM_API.format(token=self.bot_token), json=payload,
+                              timeout=self.timeout)
+            return r.status_code == 200
+        except requests.RequestException as exc:
+            logger.debug("Notice send error: %s", exc)
+            return False
+
     @property
     def enabled(self) -> bool:
         return bool(self.bot_token and self.chat_id)

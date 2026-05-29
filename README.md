@@ -146,8 +146,8 @@ pytest                    # tests (no network/keys/spaCy model needed)
 ```
 
 **24/7 free:** GitHub Actions runs `--once` on a schedule — see
-**[DEPLOY_GITHUB.md](DEPLOY_GITHUB.md)**. Always-on VM alternative:
-**[DEPLOY_ORACLE.md](DEPLOY_ORACLE.md)**. Docker: `docker compose up --build -d`.
+**[DEPLOY_GITHUB.md](DEPLOY_GITHUB.md)**. For an always-on host (instant feedback),
+run `python main.py` on any small VM/Pi, or Docker: `docker compose up --build -d`.
 
 > On the scheduled (`--once`) runner, a button tap is acknowledged on the *next*
 > run (up to your interval later). For instant acknowledgement, run `main.py`

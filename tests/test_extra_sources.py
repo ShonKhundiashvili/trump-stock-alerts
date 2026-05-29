@@ -63,10 +63,10 @@ def test_youtube_transcript_fallback_is_safe():
     assert _fetch_transcript("___not_a_real_video___") == ""
 
 
-def _settings(youtube=None, newsapi=None, kalshi=None):
+def _settings(youtube=None, newsapi=None, kalshi=None, fmp=None):
     return SimpleNamespace(
         x_bearer_token=None, youtube_api_key=youtube, newsapi_key=newsapi,
-        kalshi_api_key=kalshi,
+        kalshi_api_key=kalshi, fmp_api_key=fmp,
     )
 
 
@@ -143,10 +143,16 @@ def test_polymarket_parses_and_filters(conn, monkeypatch):
     import sources.polymarket_source as pm
     payload = [
         {"id": "1", "question": "Will Tesla and SpaceX merge in 2026?",
-         "slug": "tesla-spacex", "outcomePrices": "[\"0.80\", \"0.20\"]",
+         "slug": "tesla-spacex", "outcomes": "[\"Yes\", \"No\"]",
+         "outcomePrices": "[\"0.80\", \"0.20\"]", "volume": 2000000,
          "startDate": "2026-05-29T10:00:00Z"},
         {"id": "2", "question": "Will Karen Bass win LA mayor?",
-         "slug": "labass", "outcomePrices": "[\"0.4\",\"0.6\"]",
+         "slug": "labass", "outcomes": "[\"Yes\",\"No\"]",
+         "outcomePrices": "[\"0.4\",\"0.6\"]", "volume": 2000000,
+         "startDate": "2026-05-29T10:00:00Z"},
+        {"id": "3", "question": "Will Bitcoin hit $200k this year?",
+         "slug": "btc", "outcomes": "[\"Yes\",\"No\"]",
+         "outcomePrices": "[\"0.20\",\"0.80\"]", "volume": 2000000,
          "startDate": "2026-05-29T10:00:00Z"},
     ]
 
@@ -157,16 +163,17 @@ def test_polymarket_parses_and_filters(conn, monkeypatch):
             return payload
     monkeypatch.setattr(pm.requests, "get", lambda *a, **k: _R())
     items = pm.PolymarketSource(conn=conn).fetch_new_items()
-    assert len(items) == 1  # politics market filtered out
+    # politics market filtered out; Bitcoin filtered out (20% < 50% probability)
+    assert len(items) == 1
     assert "Tesla and SpaceX merge" in items[0].text
-    assert "80% yes" in items[0].text
+    assert "80%" in items[0].text
 
 
 def test_kalshi_parses_and_filters(conn, monkeypatch):
     import sources.kalshi_source as ks
     payload = {"markets": [
         {"ticker": "KXNVDA", "title": "Will Nvidia acquire a chip startup in 2026?",
-         "category": "Companies", "last_price": 35, "open_time": "2026-05-29T10:00:00Z"},
+         "category": "Companies", "last_price": 60, "open_time": "2026-05-29T10:00:00Z"},
         {"ticker": "KXNBA", "title": "Who wins the NBA finals?",
          "category": "Sports", "last_price": 50, "open_time": "2026-05-29T10:00:00Z"},
     ]}
@@ -190,3 +197,53 @@ def test_prediction_sources_relay_and_route(conn):
     assert pm.relay and ks.relay
     assert pm.channel == "predictions" and ks.channel == "predictions"
     assert pm.priority == "PRIMARY"
+
+
+# --- analyst ratings (FMP) + SEC stakes ------------------------------------ #
+def test_ratings_parses_fmp(conn, monkeypatch):
+    import sources.ratings_source as rs
+    rows = [{"symbol": "NVDA", "gradingCompany": "Morgan Stanley",
+             "previousGrade": "Equal-Weight", "newGrade": "Overweight",
+             "action": "upgrade", "priceTarget": 200,
+             "publishedDate": "2026-05-29T10:00:00Z", "newsURL": "http://x"}]
+
+    class _R:
+        status_code = 200
+
+        def json(self):
+            return rows
+    monkeypatch.setattr(rs.requests, "get", lambda *a, **k: _R())
+    items = rs.RatingsSource(conn=conn, api_key="k").fetch_new_items()
+    assert len(items) == 1
+    assert items[0].ticker == "NVDA"
+    assert "Morgan Stanley" in items[0].text and "Overweight" in items[0].text
+
+
+def test_ratings_skipped_without_key(conn):
+    from sources.ratings_source import RatingsSource
+    assert RatingsSource(conn=conn, api_key=None).fetch_new_items() == []
+
+
+def test_sec_stakes_parses(conn, monkeypatch):
+    import sources.sec_stakes_source as ss
+    atom = ('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">'
+            '<entry><title>SC 13D/A - GENCO SHIPPING &amp; TRADING LTD (0001326200) (Subject)</title>'
+            '<link href="https://sec.gov/x"/><updated>2026-05-28T17:27:17-04:00</updated>'
+            '<id>tag:sec:1</id></entry></feed>')
+
+    class _R:
+        status_code = 200
+        text = atom
+    monkeypatch.setattr(ss.requests, "get", lambda *a, **k: _R())
+    items = ss.SECStakesSource(conn=conn).fetch_new_items()
+    assert items
+    assert items[0].title == "GENCO SHIPPING & TRADING LTD"
+    assert "SC 13D/A" in items[0].text
+
+
+def test_new_relay_sources_route(conn):
+    cfg = {"ratings": {"enabled": True}, "sec_stakes": {"enabled": True}}
+    built = build_sources(cfg, conn, _settings(fmp="k"))
+    by = {s.name.split(":")[0]: s for s in built}
+    assert by["ratings"].relay and by["ratings"].channel == "ratings"
+    assert by["sec"].relay and by["sec"].channel == "institutions"

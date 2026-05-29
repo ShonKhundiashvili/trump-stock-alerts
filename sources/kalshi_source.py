@@ -75,11 +75,13 @@ class KalshiSource(BaseSource):
             relevant = (category in RELEVANT_CATEGORIES) or is_market_relevant(title)
             if not relevant:
                 continue
+            # Only high-conviction markets: YES price (cents) >= 50%.
+            price = m.get("last_price") or m.get("yes_bid") or 0
+            if not isinstance(price, (int, float)) or price < 50:
+                continue
             if db.source_item_exists(self.conn, self.name, ticker):
                 continue
-            price = m.get("last_price") or m.get("yes_bid")
-            prob = f"{price}%" if isinstance(price, (int, float)) else "?"
-            text = f"{title} — Kalshi: {prob} yes"
+            text = f"{title} — {int(price)}%"
             items.append(SourceItem(
                 source=self.name,
                 source_item_id=ticker,
