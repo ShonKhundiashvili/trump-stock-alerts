@@ -80,7 +80,9 @@ def test_multiple_secondary_can_reach_high():
 def test_secondary_with_primary_corroboration_high():
     d = alert_policy.evaluate(_det(Confidence.HIGH), "SECONDARY", True, 1)
     assert d.confidence == Confidence.HIGH
-    assert "corroborated" in d.verification_status.lower()
+    # A secondary report confirmed by a primary source reads as CONFIRMED.
+    assert "confirmed" in d.verification_status.lower()
+    assert "primary" in d.verification_status.lower()
 
 
 def test_social_capped_at_low_with_warning():

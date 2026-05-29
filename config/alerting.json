@@ -5,5 +5,8 @@
   "send_social_rumor": true,
   "social_rumor_min_score": 70,
   "respect_muted_sources": true,
-  "respect_muted_companies": true
+  "respect_muted_companies": true,
+  "max_age_hours": 48,
+  "social_requires_corroboration": true,
+  "penalize_uncorroborated": true
 }

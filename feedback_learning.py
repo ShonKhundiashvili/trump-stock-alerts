@@ -18,8 +18,14 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
+import alert_policy
 import db
 from models import Confidence, DetectionResult, SourceItem, SourcePriority
+
+# Penalty applied to an uncorroborated SECONDARY/SOCIAL claim with strong buy
+# language — a single unreliable "Breaking: buy X" should not score like a
+# confirmed call.
+UNCORROBORATED_PENALTY = 15
 
 # How each feedback label reflects on quality. Positive = good signal.
 LABEL_WEIGHTS = {
@@ -79,6 +85,22 @@ def phrase_quality_adjustment(conn: sqlite3.Connection, phrase: Optional[str]) -
     return _clamp(net * 3.0, -PHRASE_CAP, PHRASE_CAP)
 
 
+def is_uncorroborated(det: DetectionResult) -> bool:
+    """True when a SECONDARY/SOCIAL claim lacks cross-source confirmation.
+
+    Uncorroborated = comes from a SECONDARY or SOCIAL_RUMOR source AND no PRIMARY
+    source carries it AND fewer than 2 independent secondary sources reported it.
+    Relies on det.primary_source_found / det.corroborating_sources, which
+    alert_policy.evaluate() sets before evaluate_alert() runs (see main.process_item).
+    """
+    if det.source_priority not in (
+        SourcePriority.SECONDARY.value,
+        SourcePriority.SOCIAL_RUMOR.value,
+    ):
+        return False
+    return not det.primary_source_found and det.corroborating_sources < 2
+
+
 @dataclass
 class ScoreBreakdown:
     score: int
@@ -86,8 +108,12 @@ class ScoreBreakdown:
 
 
 def compute_alert_score(
-    conn: sqlite3.Connection, det: DetectionResult, source: str = ""
+    conn: sqlite3.Connection,
+    det: DetectionResult,
+    source: str = "",
+    alerting: Optional[dict] = None,
 ) -> ScoreBreakdown:
+    alerting = alerting or {}
     parts = {}
     score = float(BASE_SCORE.get(det.confidence, 30))
     parts["base(%s)" % det.confidence.value] = score
@@ -101,6 +127,16 @@ def compute_alert_score(
     if text_conf == Confidence.HIGH:
         parts["direct_buy_phrase"] = 15
         score += 15
+
+    # Strong buy language from an unverified SECONDARY/SOCIAL source: penalize so
+    # an unconfirmed "Breaking: buy X" can't score like a corroborated call.
+    if (
+        alerting.get("penalize_uncorroborated", True)
+        and text_conf == Confidence.HIGH
+        and is_uncorroborated(det)
+    ):
+        parts["uncorroborated_strong_claim"] = -UNCORROBORATED_PENALTY
+        score -= UNCORROBORATED_PENALTY
 
     if det.ambiguous:
         parts["ambiguous_ticker"] = -20
@@ -131,14 +167,32 @@ def evaluate_alert(
     item: SourceItem,
     alerting: dict,
 ) -> AlertDecision:
-    """Decide whether to send, applying mutes then the score threshold."""
-    bd = compute_alert_score(conn, det, source=item.source)
+    """Decide whether to send, applying mutes, recency, verification, threshold."""
+    bd = compute_alert_score(conn, det, source=item.source, alerting=alerting)
     score, parts = bd.score, bd.parts
 
     if alerting.get("respect_muted_sources", True) and db.is_source_muted(conn, item.source):
         return AlertDecision(False, score, "muted_source", parts)
     if alerting.get("respect_muted_companies", True) and db.is_company_muted(conn, det.ticker):
         return AlertDecision(False, score, "muted_company", parts)
+
+    # Recency: drop historical items (common on first run when feeds carry old
+    # entries). If the timestamp is missing/unparseable we treat it as fresh —
+    # we can't tell, so we don't suppress.
+    max_age = alerting.get("max_age_hours", 48)
+    if max_age:
+        age = alert_policy.age_hours(item.timestamp)
+        if age is not None and age > max_age:
+            return AlertDecision(False, score, "stale", parts)
+
+    # Anti-fake: an unverified single social post making a strong claim should
+    # not alert as if confirmed.
+    if (
+        alerting.get("social_requires_corroboration", True)
+        and det.source_priority == SourcePriority.SOCIAL_RUMOR.value
+        and is_uncorroborated(det)
+    ):
+        return AlertDecision(False, score, "unverified_social", parts)
 
     if det.confidence == Confidence.LOW and not alerting.get("send_low_confidence", False):
         return AlertDecision(False, score, "low_confidence_disabled", parts)

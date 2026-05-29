@@ -2,13 +2,21 @@
 
 A Telegram alert bot that monitors **public** Trump-related sources for mentions
 of public companies, tickers, stocks, or buy/investment-style language, then
-sends you a Telegram notification with the **original source link** and a
-**confidence level**.
+sends you a **concise, action-focused** Telegram notification with the
+**original source link** and a **confidence level**.
 
 It does **not** rely only on a static watchlist — it dynamically recognizes
 public companies and tickers (via cashtags, ticker tokens, spaCy NER, and fuzzy
 matching against a local stock universe), even for companies you never manually
 added.
+
+You can **classify each alert right from Telegram** with inline buttons, and the
+bot **learns from your feedback** to improve future scoring and filtering — all
+local, rule-based, and transparent (no model training, no auto-trading, no
+advice). It also filters for **recency** (stale posts are suppressed) and does
+**cross-source verification** to cut down on fakes. See
+[Human-in-the-loop feedback](#human-in-the-loop-feedback) and
+[Recency &amp; verification](#recency--verification).
 
 ---
 
@@ -20,8 +28,19 @@ added.
 - Resolves detected companies to stock tickers dynamically.
 - Detects buy/investment/stock-call language.
 - Assigns confidence: **HIGH / MEDIUM / LOW** (and **NONE** = no alert).
+- Filters for **recency** — only recent, still-actionable posts alert; old/stale
+  posts are stored but suppressed (configurable `max_age_hours` in
+  `config/alerting.json`).
+- Performs **cross-source verification** — a lone, unverified "Breaking: Trump
+  said buy X" from a single source is flagged **UNVERIFIED** / suppressed unless
+  a primary source or multiple independent sources corroborate it. This reduces
+  false alerts but cannot guarantee 100% — always verify via the source link.
 - Stores every item and detection in SQLite.
-- Sends a Telegram alert (deduplicated per source-item + ticker).
+- Sends a **concise, action-focused** Telegram alert (deduplicated per
+  source-item + ticker) with inline buttons to classify it.
+- **Learns from your Telegram feedback** to tune future scoring/filtering —
+  local, rule-based, transparent (see
+  [Human-in-the-loop feedback](#human-in-the-loop-feedback)).
 - Optionally adds an LLM "second opinion" (classification only) if a key is set.
 
 ## What it does NOT do
@@ -192,6 +211,35 @@ Non-PRIMARY sources are filtered to items that actually mention Trump
 Cross-source **deduplication**: the same statement reported by multiple outlets
 alerts only once (matched by canonical URL + normalized text hash).
 
+### Recency & verification
+
+**Recency.** Only posts newer than `max_age_hours` (default **48**) can alert.
+Older items are still polled and stored, but suppressed with the reason
+`stale` — so a long-buried post never fires a "fresh" alert. Set `max_age_hours`
+in `config/alerting.json`.
+
+**Verification verdict.** Each alert carries one of:
+
+- **CONFIRMED** — a primary source carries the claim directly.
+- **CORROBORATED** — multiple independent sources carry it.
+- **REPORTED** — a single secondary source has it (not yet corroborated).
+- **UNVERIFIED** — an uncorroborated social / single-source strong claim
+  ("Breaking: Trump said buy X").
+
+Uncorroborated strong social claims are **penalized or suppressed**, so a single
+unverified rumor doesn't trigger a high-confidence alert. This cuts false alerts
+but **cannot guarantee 100%** — always verify via the source link. Two
+`config/alerting.json` flags control this:
+
+- `social_requires_corroboration` — require a primary/independent corroborating
+  source before a social/single-source strong claim can alert.
+- `penalize_uncorroborated` — dock the alert score of uncorroborated claims
+  rather than (or in addition to) suppressing them.
+
+These work alongside the score gating in
+[Human-in-the-loop feedback](#human-in-the-loop-feedback) (`min_alert_score`,
+`send_low_confidence`, `send_social_rumor`, `social_rumor_min_score`).
+
 ### Update `data/stock_universe.csv`
 
 The bot resolves tickers from this local CSV (fast, no per-post network calls).
@@ -361,22 +409,24 @@ sudo journalctl -u trump-stock-alerts -f
 
 ## Sample Telegram alert
 
-```
-🚨 Possible stock-related Trump mention
+Alerts are concise and action-focused, and carry inline buttons so you can
+classify them (see [Human-in-the-loop feedback](#human-in-the-loop-feedback)):
 
-Company: Dell Technologies Inc.
-Ticker: DELL
-Source: web:White House transcript
-Confidence: HIGH
-Ticker match confidence: 98
-Matched phrase: go out and buy
-Text: Go out and buy a Dell, they're great.
-Time: 2026-05-08T14:31:00Z
-Detected via: watchlist
-Link: https://example.com/original-source
-
-Not financial advice. Verify the source before acting.
 ```
+🚨 DELL — Dell Technologies Inc. (S&P 500)
+HIGH · score 92 · CONFIRMED — primary source
+💬 "go out and buy": Go out and buy a Dell, they're great.
+🕒 2h ago · PRIMARY · rss:White House — News
+🔗 https://example.com/original-source
+Not financial advice.
+
+[✅ Useful] [❌ Fake]  [⚠️ Not Useful] [🧵 Needs Context]
+[🚫 Mute Source] [🔕 Mute Company]  [📈 Too Late] [🧪 Training]
+```
+
+The verdict line shows confidence, the 0–100 alert score, and a verification
+status (CONFIRMED / CORROBORATED / REPORTED / UNVERIFIED) from cross-source
+checking; `🕒 2h ago` is the post's age (stale posts are not alerted).
 
 ---
 

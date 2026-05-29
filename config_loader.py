@@ -114,6 +114,9 @@ def load_alerting(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:
             "social_rumor_min_score": 70,
             "respect_muted_sources": True,
             "respect_muted_companies": True,
+            "max_age_hours": 48,
+            "social_requires_corroboration": True,
+            "penalize_uncorroborated": True,
         },
     )
 

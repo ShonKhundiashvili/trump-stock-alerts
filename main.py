@@ -165,7 +165,9 @@ def process_item(
                                detection_id, text_hash=item.text_hash):
             continue
 
-        sent, message_id, chat_id = alerter.send(item, det, detection_id=detection_id)
+        sent, message_id, chat_id = alerter.send(
+            item, det, detection_id=detection_id, alert_score=decision.score
+        )
         if sent:
             db.mark_alert_sent(conn, detection_id)
             db.update_alert_message(conn, detection_id, message_id, chat_id)

@@ -8,9 +8,12 @@ It polls conservatively and respectfully and does NOT bypass any restrictions.
 
 from __future__ import annotations
 
+import calendar
 import hashlib
 import logging
 import sqlite3
+import time
+from datetime import datetime, timezone
 from typing import List
 
 import db
@@ -42,6 +45,25 @@ def _strip_html(text: str) -> str:
     if BeautifulSoup is None:
         return text
     return BeautifulSoup(text, "lxml").get_text(" ", strip=True)
+
+
+def _entry_timestamp(entry) -> str:
+    """Best-effort ISO8601 UTC timestamp for a feed entry.
+
+    Prefers feedparser's parsed structs (published_parsed/updated_parsed, which
+    are time.struct_time in UTC) and converts them to a reliable ISO8601 UTC
+    string. Falls back to the raw published/updated string if no struct exists.
+    """
+    for attr in ("published_parsed", "updated_parsed"):
+        st = getattr(entry, attr, None)
+        if isinstance(st, time.struct_time):
+            try:
+                # feedparser normalizes parsed structs to UTC.
+                dt = datetime.fromtimestamp(calendar.timegm(st), tz=timezone.utc)
+                return dt.isoformat()
+            except (ValueError, OverflowError):
+                continue
+    return getattr(entry, "published", "") or getattr(entry, "updated", "")
 
 
 def _entry_id(entry) -> str:
@@ -81,7 +103,7 @@ class RSSSource(BaseSource):
             if getattr(entry, "content", None):
                 content = _strip_html(" ".join(c.get("value", "") for c in entry.content))
             text = " ".join(t for t in (title, summary, content) if t).strip()
-            published = getattr(entry, "published", "") or getattr(entry, "updated", "")
+            published = _entry_timestamp(entry)
             link = getattr(entry, "link", self.url)
             items.append(
                 SourceItem(

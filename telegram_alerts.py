@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import html
 import logging
-from typing import List, Optional, Tuple
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+from typing import Optional, Tuple
 
 import requests
 
@@ -20,6 +22,8 @@ logger = logging.getLogger(__name__)
 
 DISCLAIMER = "Not financial advice. Verify the source before acting."
 TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
+
+EXCERPT_CAP = 180
 
 # (emoji label, callback action) — callback_data is "feedback:<detection_id>:<action>".
 FEEDBACK_BUTTONS = [
@@ -40,6 +44,51 @@ def build_feedback_keyboard(detection_id: int) -> dict:
     return {"inline_keyboard": rows}
 
 
+def _relative_time(timestamp: Optional[str]) -> str:
+    """Return a short relative time ("2h ago") for a parseable timestamp.
+
+    Handles ISO8601 (with trailing "Z" or "+00:00") and RFC822/RFC1123
+    (via email.utils.parsedate_to_datetime). Falls back to the raw string
+    if parsing fails. Never raises.
+    """
+    if not timestamp:
+        return ""
+    raw = str(timestamp).strip()
+    dt: Optional[datetime] = None
+    # Try ISO8601 first (normalize a trailing Z to a UTC offset).
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        dt = None
+    # Fall back to RFC822 / RFC1123.
+    if dt is None:
+        try:
+            dt = parsedate_to_datetime(raw)
+        except (ValueError, TypeError, IndexError):
+            dt = None
+    if dt is None:
+        return raw
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    try:
+        delta = datetime.now(timezone.utc) - dt
+    except (OverflowError, OSError):
+        return raw
+    secs = int(delta.total_seconds())
+    if secs < 0:
+        secs = 0
+    if secs < 60:
+        return "just now"
+    mins = secs // 60
+    if mins < 60:
+        return f"{mins}m ago"
+    hours = mins // 60
+    if hours < 24:
+        return f"{hours}h ago"
+    days = hours // 24
+    return f"{days}d ago"
+
+
 class TelegramAlerter:
     def __init__(self, bot_token: Optional[str], chat_id: Optional[str],
                  timeout: int = 15, enable_feedback: bool = True) -> None:
@@ -52,49 +101,59 @@ class TelegramAlerter:
     def enabled(self) -> bool:
         return bool(self.bot_token and self.chat_id)
 
-    def format_message(self, item: SourceItem, detection: DetectionResult) -> str:
+    def format_message(
+        self,
+        item: SourceItem,
+        detection: DetectionResult,
+        alert_score: Optional[float] = None,
+    ) -> str:
+        e = html.escape
         company = detection.company_name or "(unresolved)"
         ticker = detection.ticker or "?"
+
+        # Header: ticker + company + optional index tag.
+        header = f"🚨 <b>{e(ticker)}</b> — {e(company)}"
+        if detection.in_index:
+            header += f" <i>({e(detection.in_index)})</i>"
+
+        # Status line: confidence · score · verification verdict.
+        status_parts = [f"<b>{e(detection.confidence.value)}</b>"]
+        if alert_score is not None:
+            status_parts.append(f"score {int(round(alert_score))}")
+        status_parts.append(e(detection.verification_status or "n/a"))
+        status = " · ".join(status_parts)
+
+        lines = [header, status]
+
+        # Matched phrase + trimmed excerpt.
+        excerpt = detection.text_excerpt or ""
+        if len(excerpt) > EXCERPT_CAP:
+            excerpt = excerpt[: EXCERPT_CAP - 1].rstrip() + "…"
+        if detection.matched_phrase:
+            lines.append(f'💬 "{e(detection.matched_phrase)}": {e(excerpt)}')
+        elif excerpt:
+            lines.append(f"💬 {e(excerpt)}")
+
+        # Time + source priority + source.
+        when = _relative_time(item.timestamp) or e(item.timestamp or "")
+        lines.append(
+            f"🕒 {e(when)} · {e(detection.source_priority)} · {e(item.source)}"
+        )
+
+        # Link.
+        lines.append(f"🔗 {e(item.url)}")
+
+        # Ambiguity: other candidate tickers.
         candidates = [c for c in detection.candidate_tickers if c and c != ticker]
-        candidate_line = ""
         if detection.ambiguous and candidates:
-            candidate_line = f"\nCandidate tickers: {', '.join(candidates[:5])}"
-        matched = detection.matched_phrase or "(company/ticker mention only)"
+            lines.append(f"Candidates: {e(', '.join(candidates[:5]))}")
 
-        # HTML parse mode; escape all dynamic content.
-        e = html.escape
-        text_conf = (detection.text_confidence or detection.confidence)
-        lines = [
-            "🚨 <b>Possible stock-related Trump mention</b>",
-            "",
-            f"<b>Company:</b> {e(company)}",
-            f"<b>Ticker:</b> {e(ticker)}" + (f"  ({e(detection.in_index)})" if detection.in_index else ""),
-            f"<b>Source:</b> {e(item.source)}",
-            f"<b>Source priority:</b> {e(detection.source_priority)}",
-            f"<b>Confidence:</b> {e(detection.confidence.value)}",
-            f"<b>Verification:</b> {e(detection.verification_status or 'n/a')}",
-            f"<b>Primary source found:</b> {'Yes' if detection.primary_source_found else 'No'}",
-            f"<b>Ticker match confidence:</b> {detection.ticker_resolution_confidence:.0f}",
-            f"<b>Matched phrase:</b> {e(str(matched))}",
-            f"<b>Text:</b> {e(detection.text_excerpt)}",
-            f"<b>Time:</b> {e(item.timestamp)}",
-        ]
-        if detection.corroborating_sources > 1:
-            lines.append(f"<b>Independent news sources:</b> {detection.corroborating_sources}")
-        if text_conf and text_conf != detection.confidence:
-            lines.append(f"<b>Text classification:</b> {e(text_conf.value)}")
-        if detection.detected_via:
-            lines.append(f"<b>Detected via:</b> {e(detection.detected_via)}")
-        if detection.llm_used and detection.llm_reason:
-            lines.append(f"<b>LLM note:</b> {e(detection.llm_reason)}")
-        if candidate_line:
-            lines.append(candidate_line.strip())
-        lines.append(f"<b>Link:</b> {e(item.url)}")
-
+        # Social-rumor warning.
         warning = alert_policy.social_warning_for(detection)
         if warning:
-            lines += ["", f"<b>{e(warning)}</b>"]
-        lines += ["", f"<i>{DISCLAIMER}</i>"]
+            lines.append(f"<b>{e(warning)}</b>")
+
+        lines.append("<i>Not financial advice.</i>")
         return "\n".join(lines)
 
     def send(
@@ -102,13 +161,14 @@ class TelegramAlerter:
         item: SourceItem,
         detection: DetectionResult,
         detection_id: Optional[int] = None,
+        alert_score: Optional[float] = None,
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """Send an alert. Returns (sent_ok, telegram_message_id, chat_id).
 
         When feedback is enabled and a detection_id is given, inline feedback
         buttons are attached so you can classify the alert from Telegram.
         """
-        message = self.format_message(item, detection)
+        message = self.format_message(item, detection, alert_score=alert_score)
         payload = {
             "chat_id": self.chat_id,
             "text": message,
