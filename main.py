@@ -17,6 +17,7 @@ financial advice. Every alert links to the original source for manual review.
 from __future__ import annotations
 
 import logging
+import os
 import signal
 import threading
 import time
@@ -44,6 +45,42 @@ def _handle_signal(signum, _frame):
     global _running
     logger.info("Received signal %s; shutting down after current cycle.", signum)
     _running = False
+
+
+def _start_watchdog(max_cycle_seconds: int) -> "_Heartbeat":
+    """Start a watchdog that force-exits if a cycle wedges (so the supervisor
+    restarts us). Even with per-source fetch timeouts, a pathological hang (e.g.
+    a C-level call ignoring signals, a deadlock) could still freeze the loop;
+    KeepAlive/launchd and GitHub's job timeout only recover a process that
+    EXITS, never one that's alive-but-frozen. The watchdog converts a silent
+    freeze into a fast, automatic restart. Returns a heartbeat the loop pokes
+    after every completed cycle.
+    """
+    hb = _Heartbeat()
+
+    def _watch() -> None:
+        while _running:
+            time.sleep(min(30, max_cycle_seconds))
+            stalled = time.monotonic() - hb.last
+            if _running and stalled > max_cycle_seconds:
+                logger.critical(
+                    "Watchdog: no cycle progress for %.0fs (limit %ds) — "
+                    "force-exiting so the supervisor restarts a fresh process.",
+                    stalled, max_cycle_seconds)
+                os._exit(1)  # hard exit: a wedged thread won't honor a clean shutdown
+
+    threading.Thread(target=_watch, name="watchdog", daemon=True).start()
+    return hb
+
+
+class _Heartbeat:
+    """Monotonic timestamp of the last completed cycle, poked by the main loop."""
+
+    def __init__(self) -> None:
+        self.last = time.monotonic()
+
+    def poke(self) -> None:
+        self.last = time.monotonic()
 
 
 def maybe_apply_llm(
@@ -364,7 +401,8 @@ def run_cycle(conn, settings, detector, llm, alerter) -> None:
     n_sources = n_errors = 0
     for source in sources:
         n_sources += 1
-        items = source.safe_fetch()   # failures are isolated per source
+        # failures AND hangs are isolated per source (bounded by the timeout)
+        items = source.safe_fetch(timeout=settings.source_fetch_timeout)
         for item in items:
             try:
                 process_item(conn, item, detector, llm, alerter, alerting,
@@ -520,11 +558,19 @@ def main(run_once: bool = False) -> None:
     elif settings.enable_feedback:
         logger.warning("Feedback enabled but Telegram not configured; receiver not started.")
 
+    # Watchdog: force a restart if any cycle wedges past the limit (belt to the
+    # per-source fetch-timeout suspenders). Budget = max_cycle_seconds, but never
+    # less than one poll interval + a safety margin.
+    watchdog_limit = max(settings.watchdog_max_cycle_seconds, settings.poll_seconds + 120)
+    heartbeat = _start_watchdog(watchdog_limit)
+    logger.info("Watchdog armed: force-restart if a cycle stalls > %ds.", watchdog_limit)
+
     while _running:
         try:
             run_cycle(conn, settings, detector, llm, alerter)
         except Exception as exc:  # noqa: BLE001 - keep the bot alive
             logger.exception("Cycle error (continuing): %s", exc)
+        heartbeat.poke()   # tell the watchdog we made progress
         # Sleep in small steps so signals are handled promptly.
         for _ in range(settings.poll_seconds):
             if not _running:

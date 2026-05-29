@@ -48,6 +48,8 @@ class Settings:
     channel_chats: Dict[str, str]  # channel name -> chat id (from TELEGRAM_CHAT_<NAME>)
     account_size: float        # for position-sizing in the trade plan (research only)
     risk_pct: float            # % of account risked per idea (research only)
+    source_fetch_timeout: float  # hard per-source fetch ceiling (s); prevents hangs
+    watchdog_max_cycle_seconds: int  # restart the loop if a cycle exceeds this (s)
 
     @property
     def telegram_enabled(self) -> bool:
@@ -91,6 +93,8 @@ def load_settings(dotenv_path: Optional[str] = None) -> Settings:
         channel_chats=_channel_chats_from_env(),
         account_size=float(os.getenv("ACCOUNT_SIZE", "10000") or 10000),
         risk_pct=float(os.getenv("RISK_PCT", "1.0") or 1.0),
+        source_fetch_timeout=float(os.getenv("SOURCE_FETCH_TIMEOUT", "45") or 45),
+        watchdog_max_cycle_seconds=_int("WATCHDOG_MAX_CYCLE_SECONDS", 300),
     )
 
 
