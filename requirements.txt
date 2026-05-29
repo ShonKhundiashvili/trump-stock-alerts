@@ -11,6 +11,7 @@ yfinance>=0.2.40
 feedparser>=6.0
 beautifulsoup4>=4.12
 lxml>=5.0
+youtube-transcript-api>=0.6   # optional: reads public YouTube captions for video remarks
 pytest>=8.0
 
 # Optional LLM providers (only needed if you set OPENAI_API_KEY / ANTHROPIC_API_KEY):

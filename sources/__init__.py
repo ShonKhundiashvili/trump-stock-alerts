@@ -18,11 +18,14 @@ import config_loader
 from alert_policy import assign_priority
 
 from .base import BaseSource
+from .gdelt_source import GDELTSource
 from .news_search_source import NewsSearchSource
+from .newsapi_source import NewsAPISource
 from .rss_source import RSSSource
 from .truthsocial_source import TruthSocialSource
 from .webpage_source import WebpageSource
 from .x_source import XSource
+from .youtube_source import YouTubeSource
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,9 @@ __all__ = [
     "XSource",
     "TruthSocialSource",
     "NewsSearchSource",
+    "GDELTSource",
+    "NewsAPISource",
+    "YouTubeSource",
     "build_sources",
 ]
 
@@ -103,6 +109,50 @@ def build_sources(
                 src, priority_cfg,
                 explicit_priority=feed.get("priority", "SOCIAL_RUMOR"),
                 require_keywords=feed.get("require_keywords"),
+            ))
+
+    # --- YouTube (official Data API + optional captions) --------------- #
+    yt_cfg = sources_config.get("youtube", {})
+    if yt_cfg.get("enabled") and settings.youtube_api_key:
+        for ch in yt_cfg.get("channels", []):
+            sources.append(_finalize(
+                YouTubeSource(
+                    conn=conn, name=ch["name"], api_key=settings.youtube_api_key,
+                    channel_id=ch.get("channel_id"), handle=ch.get("handle"),
+                    fetch_transcripts=yt_cfg.get("fetch_transcripts", True),
+                    max_videos=yt_cfg.get("max_videos", 10),
+                ),
+                priority_cfg,
+                explicit_priority=ch.get("priority"),
+                require_keywords=ch.get("require_keywords"),
+            ))
+
+    # --- GDELT (free, keyless multi-outlet corroboration) — SECONDARY --- #
+    gd_cfg = sources_config.get("gdelt", {})
+    if gd_cfg.get("enabled"):
+        for q in gd_cfg.get("queries", []):
+            name = q if isinstance(q, str) else q.get("name", q.get("query", "q"))
+            query = q if isinstance(q, str) else q.get("query")
+            sources.append(_finalize(
+                GDELTSource(conn=conn, name=name, query=query,
+                            timespan=gd_cfg.get("timespan", "1d"),
+                            max_records=gd_cfg.get("max_records", 25)),
+                priority_cfg,
+                explicit_priority=gd_cfg.get("priority", "SECONDARY"),
+                require_keywords=gd_cfg.get("require_keywords"),
+            ))
+
+    # --- NewsAPI (broad multi-outlet search, needs key) — SECONDARY ----- #
+    na_cfg = sources_config.get("newsapi", {})
+    if na_cfg.get("enabled") and settings.newsapi_key:
+        for q in na_cfg.get("queries", []):
+            sources.append(_finalize(
+                NewsAPISource(conn=conn, name=q, query=q,
+                              api_key=settings.newsapi_key,
+                              lookback_hours=na_cfg.get("lookback_hours", 24)),
+                priority_cfg,
+                explicit_priority=na_cfg.get("priority", "SECONDARY"),
+                require_keywords=na_cfg.get("require_keywords"),
             ))
 
     # --- Generic public webpages / transcripts (PRIMARY) --------------- #

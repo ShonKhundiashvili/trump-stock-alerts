@@ -9,6 +9,9 @@
     "rss": "PRIMARY",
     "webpage": "PRIMARY",
     "news_search": "SECONDARY",
+    "gdelt": "SECONDARY",
+    "newsapi": "SECONDARY",
+    "youtube": "PRIMARY",
     "reddit": "SOCIAL_RUMOR"
   },
 

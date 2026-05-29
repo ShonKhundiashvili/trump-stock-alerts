@@ -65,6 +65,10 @@ cp .env.example .env                          # then fill in tokens
 
 - **sources.json** — feeds/searches by tier (PRIMARY transcripts, SECONDARY news,
   optional SOCIAL). `news_search.queries` are Google-News keyword searches.
+  Also supports **YouTube** (official Data API + optional public captions, to catch
+  spoken/video remarks — needs `YOUTUBE_API_KEY`), **GDELT** (free, keyless news
+  index — on by default), and **NewsAPI** (needs `NEWSAPI_KEY`). More independent
+  sources → stronger cross-source verification.
 - **watchlist.json** — priority aliases/overrides for common companies.
 - **phrases.json** — buy (HIGH) vs praise (MEDIUM) phrase lists.
 - **source_priority.json** — maps a source to PRIMARY / SECONDARY / SOCIAL_RUMOR.

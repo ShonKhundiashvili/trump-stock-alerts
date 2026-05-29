@@ -112,6 +112,38 @@
     ]
   },
 
+  "youtube": {
+    "enabled": true,
+    "_note": "Catches spoken/video remarks. Needs YOUTUBE_API_KEY (official Data API) to discover recent uploads; if youtube-transcript-api is installed, public captions are scanned too. Skipped automatically when no key is set.",
+    "fetch_transcripts": true,
+    "max_videos": 10,
+    "channels": [
+      { "name": "White House", "handle": "@WhiteHouse", "priority": "PRIMARY" }
+    ]
+  },
+
+  "gdelt": {
+    "enabled": true,
+    "_note": "Free, keyless GDELT news index — multi-outlet corroboration. Works out of the box.",
+    "timespan": "1d",
+    "max_records": 25,
+    "priority": "SECONDARY",
+    "_note2": "One combined query — GDELT rate-limits rapid back-to-back calls (HTTP 429).",
+    "queries": [
+      { "name": "trump-stocks", "query": "Trump (buy OR \"go buy\" OR bought OR shares OR stock OR \"great company\")" }
+    ]
+  },
+
+  "newsapi": {
+    "enabled": true,
+    "_note": "Broad multi-outlet search via NewsAPI.org. Needs NEWSAPI_KEY (free tier); skipped automatically when no key is set.",
+    "lookback_hours": 24,
+    "priority": "SECONDARY",
+    "queries": [
+      "Trump (buy OR bought OR invest OR shares) (stock OR company)"
+    ]
+  },
+
   "webpages": {
     "enabled": false,
     "pages": [

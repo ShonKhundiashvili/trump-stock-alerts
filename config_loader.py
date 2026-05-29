@@ -36,6 +36,8 @@ class Settings:
     x_bearer_token: Optional[str]
     openai_api_key: Optional[str]
     anthropic_api_key: Optional[str]
+    youtube_api_key: Optional[str]
+    newsapi_key: Optional[str]
     poll_seconds: int
     database_path: str
     log_level: str
@@ -71,6 +73,8 @@ def load_settings(dotenv_path: Optional[str] = None) -> Settings:
         x_bearer_token=os.getenv("X_BEARER_TOKEN") or None,
         openai_api_key=os.getenv("OPENAI_API_KEY") or None,
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY") or None,
+        youtube_api_key=os.getenv("YOUTUBE_API_KEY") or None,
+        newsapi_key=os.getenv("NEWSAPI_KEY") or None,
         poll_seconds=_int("POLL_SECONDS", 60),
         database_path=os.getenv("DATABASE_PATH", "alerts.db"),
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
