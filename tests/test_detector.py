@@ -186,3 +186,36 @@ def test_index_ticker_praise_only_alerts(detector):
     # PLTR is in the index -> praise alone is enough (MEDIUM).
     by = _by_ticker(detector.detect("PLTR are amazing."))
     assert by["PLTR"].confidence == Confidence.MEDIUM
+
+
+# --- bullish vs bearish direction ------------------------------------------ #
+def test_bullish_direction(detector):
+    by = _by_ticker(detector.detect("Go out and buy a Dell, they're great."))
+    assert by["DELL"].direction == "bullish"
+
+
+def test_bearish_attack_detected(detector):
+    # Trump attacking a company is also market-moving -> bearish.
+    by = _by_ticker(detector.detect("Boeing is a total disaster, a complete disaster."))
+    assert "BA" in by
+    assert by["BA"].direction == "bearish"
+    assert by["BA"].confidence == Confidence.HIGH
+
+
+def test_bearish_tariff_medium(detector):
+    by = _by_ticker(detector.detect("We are putting a big tariff on Boeing."))
+    assert "BA" in by
+    assert by["BA"].direction == "bearish"
+
+
+def test_bearish_negative_performance(detector):
+    by = _by_ticker(detector.detect("NVDA plunged 20% today."))
+    assert by["NVDA"].direction == "bearish"
+    assert by["NVDA"].confidence == Confidence.MEDIUM
+
+
+def test_contract_catalyst_phrase(detector):
+    by = _by_ticker(detector.detect("Dell awarded a Pentagon government contract worth $2B."))
+    assert "DELL" in by
+    assert by["DELL"].confidence == Confidence.MEDIUM
+    assert by["DELL"].direction == "bullish"

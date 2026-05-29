@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS detections (
     candidate_tickers             TEXT,
     confidence                    TEXT,
     text_confidence               TEXT,
+    direction                     TEXT,
     source_priority               TEXT,
     verification_status           TEXT,
     ticker_resolution_confidence  REAL,
@@ -144,6 +145,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "source_items": {"priority": "TEXT", "canonical_url": "TEXT", "text_hash": "TEXT"},
         "detections": {
             "text_confidence": "TEXT",
+            "direction": "TEXT",
             "source_priority": "TEXT",
             "verification_status": "TEXT",
             "alert_score": "INTEGER",
@@ -207,9 +209,9 @@ def insert_detection(
         INSERT INTO detections
             (source_item_rowid, source, source_item_id, url, text, timestamp,
              company, ticker, candidate_tickers, confidence, text_confidence,
-             source_priority, verification_status,
+             direction, source_priority, verification_status,
              ticker_resolution_confidence, matched_phrase, alert_sent, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
         """,
         (
             source_item_rowid,
@@ -223,6 +225,7 @@ def insert_detection(
             json.dumps(detection.candidate_tickers),
             detection.confidence.value,
             text_conf.value if text_conf else None,
+            detection.direction,
             detection.source_priority,
             detection.verification_status,
             detection.ticker_resolution_confidence,

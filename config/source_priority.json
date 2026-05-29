@@ -12,6 +12,7 @@
     "gdelt": "SECONDARY",
     "newsapi": "SECONDARY",
     "youtube": "PRIMARY",
+    "usaspending": "PRIMARY",
     "reddit": "SOCIAL_RUMOR"
   },
 

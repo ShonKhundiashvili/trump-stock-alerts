@@ -111,13 +111,14 @@ class TelegramAlerter:
         company = detection.company_name or "(unresolved)"
         ticker = detection.ticker or "?"
 
-        # Header: ticker + company + optional index tag.
-        header = f"🚨 <b>{e(ticker)}</b> — {e(company)}"
+        # Header: direction + ticker + company + optional index tag.
+        dir_emoji = {"bullish": "📈", "bearish": "📉"}.get(detection.direction, "🚨")
+        header = f"{dir_emoji} <b>{e(ticker)}</b> — {e(company)}"
         if detection.in_index:
             header += f" <i>({e(detection.in_index)})</i>"
 
-        # Status line: confidence · score · verification verdict.
-        status_parts = [f"<b>{e(detection.confidence.value)}</b>"]
+        # Status line: direction · confidence · score · verification verdict.
+        status_parts = [f"<b>{e(detection.confidence.value)}</b> {e(detection.direction)}"]
         if alert_score is not None:
             status_parts.append(f"score {int(round(alert_score))}")
         status_parts.append(e(detection.verification_status or "n/a"))

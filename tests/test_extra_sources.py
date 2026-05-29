@@ -95,3 +95,31 @@ def test_gdelt_priority_is_secondary(conn):
     gdelt = [s for s in built if s.name.startswith("gdelt:")][0]
     assert gdelt.priority == "SECONDARY"
     assert gdelt.require_keywords  # non-primary -> trump keyword filter applied
+
+
+def test_usaspending_parses_awards(conn, monkeypatch):
+    import sources.usaspending_source as us
+
+    class _R:
+        status_code = 200
+
+        def json(self):
+            return {"results": [
+                {"Award ID": "AW1", "Recipient Name": "DELL TECHNOLOGIES INC",
+                 "Award Amount": 2.1e9, "Awarding Agency": "Department of Defense",
+                 "Start Date": "2026-05-28", "Description": "IT services"},
+            ]}
+    monkeypatch.setattr(us.requests, "post", lambda *a, **k: _R())
+    src = us.USASpendingSource(conn=conn, min_amount=1e8)
+    items = src.fetch_new_items()
+    assert len(items) == 1
+    assert "awarded a Department of Defense government contract" in items[0].text
+    assert "$2.1B" in items[0].text
+    assert items[0].source_item_id == "AW1"
+
+
+def test_usaspending_builds_as_primary(conn):
+    built = build_sources({"usaspending": {"enabled": True}}, conn, _settings())
+    us = [s for s in built if s.name.startswith("usaspending:")]
+    assert us and us[0].priority == "PRIMARY"
+    assert us[0].require_keywords == []  # company is the subject; no Trump filter

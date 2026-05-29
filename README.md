@@ -17,7 +17,12 @@ your preferences (local, rule-based, transparent) to tune future alerts.
 - Polls sources (RSS/transcripts, Google-News keyword searches, optional X) for
   company/ticker mentions — dynamically, against a ~12k US-ticker universe (not a
   hardcoded list), with S&P 500 / Nasdaq-100 used as a precision/trust signal.
-- Detects buy/ownership/praise/performance language and scores each alert 0–100.
+- Detects buy/ownership/praise/performance language **and bearish signals**
+  (attacks, tariffs, investigations, negative performance) — each alert is tagged
+  📈 bullish or 📉 bearish — and scores it 0–100.
+- Tracks Trump **and** the administration + a few other market-movers (Fed,
+  Treasury, etc.), plus official catalysts like **federal contract awards**
+  (USAspending.gov).
 - **Recency:** only recent posts alert; stale/old items are stored but suppressed.
 - **Cross-source verification:** flags single-source/unverified "Breaking…" claims;
   HIGH needs a primary source or multiple independent sources.
@@ -67,8 +72,9 @@ cp .env.example .env                          # then fill in tokens
   optional SOCIAL). `news_search.queries` are Google-News keyword searches.
   Also supports **YouTube** (official Data API + optional public captions, to catch
   spoken/video remarks — needs `YOUTUBE_API_KEY`), **GDELT** (free, keyless news
-  index — on by default), and **NewsAPI** (needs `NEWSAPI_KEY`). More independent
-  sources → stronger cross-source verification.
+  index — on by default), **NewsAPI** (needs `NEWSAPI_KEY`), and **USAspending**
+  (free, keyless — recent large federal contract awards to public companies). More
+  independent sources → stronger cross-source verification.
 - **watchlist.json** — priority aliases/overrides for common companies.
 - **phrases.json** — buy (HIGH) vs praise (MEDIUM) phrase lists.
 - **source_priority.json** — maps a source to PRIMARY / SECONDARY / SOCIAL_RUMOR.

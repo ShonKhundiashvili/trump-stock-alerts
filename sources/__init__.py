@@ -23,6 +23,7 @@ from .news_search_source import NewsSearchSource
 from .newsapi_source import NewsAPISource
 from .rss_source import RSSSource
 from .truthsocial_source import TruthSocialSource
+from .usaspending_source import USASpendingSource
 from .webpage_source import WebpageSource
 from .x_source import XSource
 from .youtube_source import YouTubeSource
@@ -43,8 +44,13 @@ __all__ = [
 ]
 
 # Default keyword filter applied to non-PRIMARY sources so general news/social
-# feeds only classify items that actually mention Trump.
-DEFAULT_TRUMP_KEYWORDS = ["trump", "realdonaldtrump", "potus", "president trump"]
+# feeds only classify items about the market-moving figures we track (Trump +
+# administration + a few other high-impact speakers).
+DEFAULT_TRUMP_KEYWORDS = [
+    "trump", "realdonaldtrump", "potus", "president trump", "white house",
+    "treasury", "bessent", "powell", "the fed", "federal reserve",
+    "commerce secretary", "musk", "elon", "administration",
+]
 
 
 def _finalize(src: BaseSource, priority_cfg: Dict, explicit_priority=None,
@@ -154,6 +160,21 @@ def build_sources(
                 explicit_priority=na_cfg.get("priority", "SECONDARY"),
                 require_keywords=na_cfg.get("require_keywords"),
             ))
+
+    # --- USAspending federal contracts (official .gov API) — PRIMARY --- #
+    us_cfg = sources_config.get("usaspending", {})
+    if us_cfg.get("enabled"):
+        sources.append(_finalize(
+            USASpendingSource(
+                conn=conn, name=us_cfg.get("name", "federal contracts"),
+                min_amount=us_cfg.get("min_amount", 50_000_000),
+                lookback_days=us_cfg.get("lookback_days", 7),
+                max_records=us_cfg.get("max_records", 25),
+            ),
+            priority_cfg,
+            explicit_priority=us_cfg.get("priority", "PRIMARY"),
+            require_keywords=us_cfg.get("require_keywords", []),  # company IS the subject
+        ))
 
     # --- Generic public webpages / transcripts (PRIMARY) --------------- #
     web_cfg = sources_config.get("webpages", {})

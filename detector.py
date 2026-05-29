@@ -92,6 +92,13 @@ PERFORMANCE_RE = [
     re.compile(r"\bskyrocket(ed|ing|s)?\b"),
     re.compile(r"\brecord\s+high\b"),
 ]
+# BEARISH MEDIUM: negative performance ("down 20%", "plunged", "crashed").
+BEARISH_PERFORMANCE_RE = [
+    re.compile(r"\bdown\s+\d{1,4}(\.\d+)?\s*%"),
+    re.compile(r"\b\d{1,4}(\.\d+)?\s*%\s+(loss|lower|drop|down|plunge)"),
+    re.compile(r"\b(plunge|plunged|crash|crashed|tank|tanked|sink|sinks|tumble|tumbled|slump)\b"),
+    re.compile(r"\brecord\s+low\b"),
+]
 
 EXCERPT_MAX = 320
 
@@ -127,8 +134,11 @@ class Detector:
     ) -> None:
         self.resolver = resolver
         phrases = phrases or {}
+        # Bullish (HIGH/MEDIUM) and bearish (BEARISH_HIGH/BEARISH_MEDIUM) phrase lists.
         self.high_phrases = [p.lower() for p in phrases.get("HIGH", [])]
         self.medium_phrases = [p.lower() for p in phrases.get("MEDIUM", [])]
+        self.bearish_high_phrases = [p.lower() for p in phrases.get("BEARISH_HIGH", [])]
+        self.bearish_medium_phrases = [p.lower() for p in phrases.get("BEARISH_MEDIUM", [])]
         self.watchlist = watchlist or {}
         priority_tickers = priority_tickers or {}
         self._sp500 = {t.upper() for t in priority_tickers.get("SP500", [])}
@@ -228,47 +238,53 @@ class Detector:
         return run
 
     # ------------------------------------------------------------------ #
-    def _all_phrase_hits(self, lowered: str) -> List[Tuple[int, PhraseLevel, str]]:
-        """Every phrase/regex match with its char position and level."""
-        hits: List[Tuple[int, PhraseLevel, str]] = []
-        for phrase in self.high_phrases:
-            start = lowered.find(phrase)
-            while start != -1:
-                hits.append((start, PhraseLevel.HIGH, phrase))
-                start = lowered.find(phrase, start + 1)
-        for rx in OWNERSHIP_RE:
-            for m in rx.finditer(lowered):
-                hits.append((m.start(), PhraseLevel.HIGH, m.group(0)))
-        for phrase in self.medium_phrases:
-            start = lowered.find(phrase)
-            while start != -1:
-                hits.append((start, PhraseLevel.MEDIUM, phrase))
-                start = lowered.find(phrase, start + 1)
-        for rx in PERFORMANCE_RE:
-            for m in rx.finditer(lowered):
-                hits.append((m.start(), PhraseLevel.MEDIUM, m.group(0)))
+    def _all_phrase_hits(self, lowered: str):
+        """Every phrase/regex match: (char_pos, level, text, direction).
+
+        direction is "bullish" (buy/praise/positive perf) or "bearish"
+        (sell/attack/negative perf), so the same machinery catches Trump talking
+        a stock UP or DOWN.
+        """
+        hits = []
+
+        def add_substrings(phrases, level, direction):
+            for phrase in phrases:
+                start = lowered.find(phrase)
+                while start != -1:
+                    hits.append((start, level, phrase, direction))
+                    start = lowered.find(phrase, start + 1)
+
+        def add_regex(regexes, level, direction):
+            for rx in regexes:
+                for m in rx.finditer(lowered):
+                    hits.append((m.start(), level, m.group(0), direction))
+
+        add_substrings(self.high_phrases, PhraseLevel.HIGH, "bullish")
+        add_regex(OWNERSHIP_RE, PhraseLevel.HIGH, "bullish")
+        add_substrings(self.bearish_high_phrases, PhraseLevel.HIGH, "bearish")
+        add_substrings(self.medium_phrases, PhraseLevel.MEDIUM, "bullish")
+        add_regex(PERFORMANCE_RE, PhraseLevel.MEDIUM, "bullish")
+        add_substrings(self.bearish_medium_phrases, PhraseLevel.MEDIUM, "bearish")
+        add_regex(BEARISH_PERFORMANCE_RE, PhraseLevel.MEDIUM, "bearish")
         return hits
 
     @staticmethod
-    def _nearest_phrase(
-        phrase_hits: List[Tuple[int, PhraseLevel, str]], positions: List[int]
-    ) -> Tuple[PhraseLevel, Optional[str]]:
+    def _nearest_phrase(phrase_hits, positions):
         """Best phrase within PROXIMITY_CHARS of any of the ticker's positions.
 
-        This ensures a buy/praise phrase is actually *near* the ticker mention,
-        not just somewhere in a long document — so "X soars" in a market roundup
-        that also names ten other tickers doesn't tag all of them.
+        Returns (level, phrase_text, direction). Proximity keeps long documents
+        precise (a phrase must be near the ticker mention, not just in the doc).
         """
-        best_level, best_phrase = PhraseLevel.NONE, None
-        for ppos, plevel, ptext in phrase_hits:
+        best_level, best_phrase, best_dir = PhraseLevel.NONE, None, "neutral"
+        for ppos, plevel, ptext, pdir in phrase_hits:
             for tpos in positions:
                 if abs(ppos - tpos) <= PROXIMITY_CHARS:
                     if _PL_RANK[plevel] > _PL_RANK[best_level]:
-                        best_level, best_phrase = plevel, ptext
+                        best_level, best_phrase, best_dir = plevel, ptext, pdir
                     break
             if best_level == PhraseLevel.HIGH:
                 break
-        return best_level, best_phrase
+        return best_level, best_phrase, best_dir
 
     def detect(self, text: str) -> List[DetectionResult]:
         normalized = normalize(text)
@@ -372,7 +388,7 @@ class Detector:
         # Build detection results, scoring each ticker by the NEAREST phrase.
         results: List[DetectionResult] = []
         for ticker, (cm, via, positions) in resolved.items():
-            phrase_level, matched_phrase = self._nearest_phrase(phrase_hits, positions)
+            phrase_level, matched_phrase, direction = self._nearest_phrase(phrase_hits, positions)
             confidence = self._assign_confidence(cm, phrase_level)
             if confidence == Confidence.NONE:
                 continue
@@ -387,6 +403,7 @@ class Detector:
                     text_excerpt=excerpt,
                     ambiguous=cm.ambiguous,
                     detected_via=via,
+                    direction=direction if matched_phrase else "neutral",
                     in_index=self._index_label(cm.ticker),
                 )
             )

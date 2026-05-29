@@ -91,8 +91,23 @@
       "Trump incredible company",
       "Trump loves company stock",
       "Trump stock soars",
-      "Trump Truth Social stock"
+      "Trump Truth Social stock",
+      "Trump tariff company stock",
+      "Trump attacks company stock",
+      "White House company stock",
+      "Treasury Secretary Bessent stock",
+      "Fed Powell stock market",
+      "Elon Musk buy stock company"
     ]
+  },
+
+  "usaspending": {
+    "enabled": true,
+    "_note": "Official, free USAspending.gov API. Recent large federal CONTRACT awards to PUBLIC companies (e.g. defense deals). PRIMARY/factual. Tune min_amount to control volume.",
+    "min_amount": 100000000,
+    "lookback_days": 5,
+    "max_records": 25,
+    "priority": "PRIMARY"
   },
 
   "reddit": {
