@@ -14,7 +14,7 @@
   "require_corroboration": true,
   "min_independent_sources": 2,
   "ticker_cooldown_hours": 6,
-  "_relay": "Prediction markets are hot when actively traded, not when created; recency off (0) — dedup + per-cycle cap control volume.",
-  "relay_max_age_hours": 0,
+  "_relay": "Prediction markets skip recency (hot-when-traded). News-type relay (ratings/SEC/institutional news) must be within relay_max_age_hours. Per-source caps + recency bound first-run volume.",
+  "relay_max_age_hours": 72,
   "cycle_summary": true
 }

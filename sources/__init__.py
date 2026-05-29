@@ -19,6 +19,7 @@ from alert_policy import assign_channel, assign_priority
 
 from .base import BaseSource
 from .gdelt_source import GDELTSource
+from .institutions_news_source import InstitutionsNewsSource
 from .kalshi_source import KalshiSource
 from .news_search_source import NewsSearchSource
 from .newsapi_source import NewsAPISource
@@ -212,11 +213,22 @@ def build_sources(
     # --- SEC 13D/13G stake filings — relay to institutions ------------- #
     sec_cfg = sources_config.get("sec_stakes", {})
     if sec_cfg.get("enabled"):
-        src = SECStakesSource(conn=conn, max_emit=sec_cfg.get("max_emit", 12))
+        src = SECStakesSource(conn=conn, lookback_days=sec_cfg.get("lookback_days", 45),
+                              max_emit=sec_cfg.get("max_emit", 15))
         src.relay = True
         sources.append(_finalize(src, priority_cfg,
                                  explicit_priority=sec_cfg.get("priority", "PRIMARY"),
                                  require_keywords=[]))
+
+    # --- Institutional-holder news (year-round) — relay to institutions  #
+    in_cfg = sources_config.get("institutions_news", {})
+    if in_cfg.get("enabled"):
+        for query in in_cfg.get("queries", []):
+            src = InstitutionsNewsSource(conn=conn, query=query)
+            src.relay = True
+            sources.append(_finalize(src, priority_cfg,
+                                     explicit_priority=in_cfg.get("priority", "SECONDARY"),
+                                     require_keywords=[]))
 
     # --- Generic public webpages / transcripts (PRIMARY) --------------- #
     web_cfg = sources_config.get("webpages", {})

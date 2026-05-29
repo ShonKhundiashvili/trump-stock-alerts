@@ -226,19 +226,23 @@ def test_ratings_skipped_without_key(conn):
 
 def test_sec_stakes_parses(conn, monkeypatch):
     import sources.sec_stakes_source as ss
-    atom = ('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">'
-            '<entry><title>SC 13D/A - GENCO SHIPPING &amp; TRADING LTD (0001326200) (Subject)</title>'
-            '<link href="https://sec.gov/x"/><updated>2026-05-28T17:27:17-04:00</updated>'
-            '<id>tag:sec:1</id></entry></feed>')
+    resp_json = {"hits": {"hits": [
+        {"_id": "0001104659-26-066737:doc.htm",
+         "_source": {"file_type": "SC 13G", "file_date": "2026-05-28",
+                     "display_names": ["TESLA INC  (TSLA)  (CIK 0001318605)",
+                                       "BlackRock Inc.  (BLK)  (CIK 0001364742)"]}},
+    ]}}
 
     class _R:
         status_code = 200
-        text = atom
+
+        def json(self):
+            return resp_json
     monkeypatch.setattr(ss.requests, "get", lambda *a, **k: _R())
-    items = ss.SECStakesSource(conn=conn).fetch_new_items()
+    items = ss.SECStakesSource(conn=conn, filers=["BlackRock"]).fetch_new_items()
     assert items
-    assert items[0].title == "GENCO SHIPPING & TRADING LTD"
-    assert "SC 13D/A" in items[0].text
+    assert items[0].title == "TESLA INC"           # subject company (not the filer)
+    assert "BlackRock filed SC 13G on TESLA INC" in items[0].text
 
 
 def test_new_relay_sources_route(conn):

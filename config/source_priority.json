@@ -17,6 +17,7 @@
     "kalshi": "PRIMARY",
     "ratings": "PRIMARY",
     "sec": "PRIMARY",
+    "instnews": "SECONDARY",
     "reddit": "SOCIAL_RUMOR"
   },
 

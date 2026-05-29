@@ -102,6 +102,19 @@ def should_alert(det: DetectionResult, min_alert_rank: int) -> bool:
     return False
 
 
+_RELAY_LABELS = {
+    "polymarket": "Prediction market (Polymarket)",
+    "kalshi": "Prediction market (Kalshi)",
+    "ratings": "Analyst rating",
+    "sec": "SEC stake filing (13D/13G)",
+    "instnews": "Institutional news",
+}
+
+
+def _relay_label(source: str) -> str:
+    return _RELAY_LABELS.get(source.split(":")[0], "Market signal")
+
+
 def process_relay(conn, item, detector, alerter, alerting, rowid, stats=None) -> None:
     """Forward a pre-filtered prediction-market item to its channel as news.
 
@@ -110,11 +123,13 @@ def process_relay(conn, item, detector, alerter, alerting, rowid, stats=None) ->
     still apply recency and dedup, opportunistically resolve a ticker for
     display, and route to the item's channel (e.g. 'predictions').
     """
-    # Prediction markets are standing news; use a longer window than news posts.
-    max_age = alerting.get("relay_max_age_hours", 168)
+    # Prediction markets are "standing" (hot when traded) so skip recency for
+    # them; news-type relay (ratings / SEC / institutional news) must be recent.
+    is_market = item.source.split(":")[0] in ("polymarket", "kalshi")
+    max_age = 0 if is_market else alerting.get("relay_max_age_hours", 72)
     age = alert_policy.age_hours(item.timestamp)
     if max_age and age is not None and age > max_age:
-        return  # too old (e.g. months-old standing market)
+        return  # too old
 
     # Resolve a ticker/company for display: (1) source-provided hint,
     # (2) detector on the text, (3) resolver on the title (clean company name).
@@ -150,7 +165,7 @@ def process_relay(conn, item, detector, alerter, alerting, rowid, stats=None) ->
         direction="neutral",
         in_index=in_index or "",
         source_priority=item.priority,
-        verification_status=f"Prediction market ({item.source.split(':')[0]})",
+        verification_status=_relay_label(item.source),
     )
     detection_id = db.insert_detection(conn, item, det, rowid)
     db.set_alert_score(conn, detection_id, alerting.get("min_alert_score", 60))

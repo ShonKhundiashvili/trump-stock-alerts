@@ -120,9 +120,23 @@
 
   "sec_stakes": {
     "enabled": true,
-    "_note": "SEC EDGAR 13D/13G stake filings (>5% ownership, filed within days). Free, keyless. Forwarded to the 'institutions' topic.",
-    "max_emit": 12,
+    "_note": "SEC EDGAR 13D/13G stake filings BY major holders (BlackRock, Vanguard, ...). Free, keyless, official. Seasonal (13G cluster in Feb). Forwarded to 'institutions'.",
+    "lookback_days": 45,
+    "max_emit": 15,
     "priority": "PRIMARY"
+  },
+
+  "institutions_news": {
+    "enabled": true,
+    "_note": "Year-round big-holder news (stocks + crypto) via Google News. Forwarded to 'institutions'.",
+    "priority": "SECONDARY",
+    "queries": [
+      "BlackRock stake company",
+      "Vanguard increases stake",
+      "BlackRock buys Bitcoin ETF",
+      "BlackRock Vanguard 13D 13G stake",
+      "institutional investor takes stake"
+    ]
   },
 
   "kalshi": {

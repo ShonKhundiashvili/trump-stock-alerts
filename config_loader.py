@@ -159,7 +159,7 @@ def load_alerting(config_dir: Path = CONFIG_DIR) -> Dict[str, Any]:
             "require_corroboration": True,
             "min_independent_sources": 2,
             "ticker_cooldown_hours": 6,
-            "relay_max_age_hours": 0,
+            "relay_max_age_hours": 72,
             "cycle_summary": True,
         },
     )
