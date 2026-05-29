@@ -88,3 +88,25 @@ def test_social_capped_at_low_with_warning():
     assert d.confidence == Confidence.LOW
     assert alert_policy.social_warning_for(d)
     assert "unverified" in d.verification_status.lower()
+
+
+# --- social early-warning alert gate (main.should_alert) -------------------- #
+def test_should_alert_gate():
+    import main
+    medium_rank = Confidence.MEDIUM.rank()
+
+    # Social post with a real stock-call (text HIGH) -> alerts despite LOW final.
+    social_call = alert_policy.evaluate(_det(Confidence.HIGH), "SOCIAL_RUMOR", False, 0)
+    assert main.should_alert(social_call, medium_rank) is True
+
+    # Social post that is only a bare company mention (text LOW) -> stays quiet.
+    social_bare = alert_policy.evaluate(_det(Confidence.LOW), "SOCIAL_RUMOR", False, 0)
+    assert main.should_alert(social_bare, medium_rank) is False
+
+    # A PRIMARY LOW mention -> below MEDIUM threshold, no alert.
+    primary_low = alert_policy.evaluate(_det(Confidence.LOW), "PRIMARY", False, 0)
+    assert main.should_alert(primary_low, medium_rank) is False
+
+    # A PRIMARY HIGH -> alerts.
+    primary_high = alert_policy.evaluate(_det(Confidence.HIGH), "PRIMARY", False, 0)
+    assert main.should_alert(primary_high, medium_rank) is True

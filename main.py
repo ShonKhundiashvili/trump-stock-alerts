@@ -26,7 +26,7 @@ import config_loader
 import db
 from detector import Detector
 from llm_classifier import LLMClassifier
-from models import Confidence, DetectionResult, SourceItem
+from models import Confidence, DetectionResult, SourceItem, SourcePriority
 from sources import build_sources
 from telegram_alerts import TelegramAlerter
 from ticker_resolver import TickerResolver
@@ -81,6 +81,24 @@ def _keyword_ok(text: str, require_keywords: list) -> bool:
     return any(kw in low for kw in require_keywords)
 
 
+def should_alert(det: DetectionResult, min_alert_rank: int) -> bool:
+    """Decide whether a detection is worth a Telegram alert.
+
+    Normally: final confidence must meet the configured threshold.
+    Exception: SOCIAL_RUMOR sources are capped at LOW by policy, so they'd never
+    pass a MEDIUM threshold — but the rumor layer exists precisely to surface
+    early-warning stock-calls. So we let a social item through (still labelled
+    LOW + unverified) when its underlying TEXT actually contained a stock-call
+    (text confidence MEDIUM/HIGH), while bare social company mentions stay quiet.
+    """
+    if det.confidence.rank() >= min_alert_rank:
+        return True
+    if det.source_priority == SourcePriority.SOCIAL_RUMOR.value:
+        text_conf = det.text_confidence or det.confidence
+        return text_conf.rank() >= Confidence.MEDIUM.rank()
+    return False
+
+
 def process_item(
     conn,
     item: SourceItem,
@@ -125,8 +143,9 @@ def process_item(
         db.update_detection_verdict(conn, detection_id, det.confidence.value,
                                     det.verification_status)
 
-        # Everything is stored; only alert at/above the configured threshold.
-        if det.confidence.rank() < min_alert_rank:
+        # Everything is stored; only alert at/above the configured threshold
+        # (with the SOCIAL_RUMOR early-warning exception in should_alert).
+        if not should_alert(det, min_alert_rank):
             logger.debug("Below alert threshold (%s, %s) for %s / %s; stored only.",
                          det.confidence.value, item.priority, item.source, det.ticker)
             continue

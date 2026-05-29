@@ -69,8 +69,8 @@
   },
 
   "reddit": {
-    "enabled": false,
-    "_note": "SOCIAL_RUMOR early-warning layer. Noisy/unverified by design — alerts from here are capped at LOW and labelled unverified. Enable if you want a rumor feed.",
+    "enabled": true,
+    "_note": "SOCIAL_RUMOR early-warning layer. Noisy/unverified by design — alerts from here are capped at LOW and labelled unverified, and only fire when a post contains genuine stock-call language. Set enabled=false to turn off.",
     "feeds": [
       {
         "name": "wallstreetbets — trump",
